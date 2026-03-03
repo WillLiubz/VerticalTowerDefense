@@ -1,0 +1,1305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Vertical Defense - Demo</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0a0e1a;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+  font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  color: #fff;
+  overflow-x: hidden;
+}
+#gameWrapper {
+  width: 480px;
+  max-width: 100vw;
+  display: flex;
+  flex-direction: column;
+}
+#hud {
+  background: #131928;
+  padding: 6px 12px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  border-bottom: 2px solid #1e3a5f;
+  height: 44px;
+  flex-shrink: 0;
+}
+.hud-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 15px;
+  font-weight: bold;
+}
+.hud-item span { min-width: 28px; text-align: left; }
+#gameCanvas {
+  display: block;
+  background: #0d1b2a;
+  flex-shrink: 0;
+}
+#bottomUI {
+  background: #131928;
+  padding: 6px 8px;
+  border-top: 2px solid #1e3a5f;
+  flex-shrink: 0;
+}
+#buffsDisplay {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-height: 20px;
+  margin-bottom: 4px;
+}
+.buff-tag {
+  background: #1a3a1a;
+  border: 1px solid #2a7a2a;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 11px;
+  color: #aaffaa;
+}
+#shopRow {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+  align-items: center;
+}
+.btn {
+  background: #1a2a4a;
+  color: #fff;
+  border: 2px solid #2a4a8a;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+  font-family: inherit;
+}
+.btn:hover:not(:disabled) { background: #2a3a6a; }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn.pack-normal  { border-color: #666; }
+.btn.pack-advanced{ border-color: #4488ff; background: #112240; }
+.btn.pack-rare    { border-color: #aa44ff; background: #1a1240; }
+.btn.pack-epic    { border-color: #ffaa00; background: #2a1a00; box-shadow: 0 0 8px #ffaa0066; }
+.btn.gamble-btn   { border-color: #cc4444; background: #2a1010; }
+.btn.wave-btn     { border-color: #2a8a2a; background: #0d2a0d; }
+#cardArea {
+  display: flex;
+  gap: 4px;
+  min-height: 78px;
+  background: #0d1220;
+  border: 1px solid #1e3a5f;
+  border-radius: 8px;
+  padding: 5px;
+  margin-bottom: 5px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+#cardArea .empty-hint {
+  color: #445;
+  font-size: 12px;
+  width: 100%;
+  text-align: center;
+}
+.card {
+  width: 66px;
+  height: 68px;
+  background: linear-gradient(160deg, #1a1a3e, #2a2a5e);
+  border: 2px solid #3344aa;
+  border-radius: 8px;
+  padding: 3px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 9px;
+  text-align: center;
+  transition: transform 0.12s, border-color 0.12s;
+  user-select: none;
+  flex-shrink: 0;
+}
+.card:hover { transform: translateY(-4px); border-color: #7788ff; }
+.card.selected { border-color: #ffff00; box-shadow: 0 0 8px #ffff00aa; }
+.card.lv1 { border-color: #666; }
+.card.lv2 { border-color: #4488ff; background: linear-gradient(160deg, #0a1a3a, #1a2a5a); }
+.card.lv3 { border-color: #ffaa00; background: linear-gradient(160deg, #2a1a00, #3a2a10); box-shadow: 0 0 5px #ffaa0055; }
+.card.selected.lv1 { border-color: #ffff00; }
+.card.selected.lv2 { border-color: #ffff00; }
+.card.selected.lv3 { border-color: #ffff00; }
+.card-icon { font-size: 22px; line-height: 1.2; }
+.card-name { font-size: 9px; line-height: 1.1; color: #ccc; }
+.card-meta { font-size: 8px; color: #888; }
+#supportRow {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-bottom: 5px;
+}
+.support-buy-btn {
+  flex: 1;
+  background: #0d1b0d;
+  border: 1px solid #1a3a1a;
+  border-radius: 6px;
+  padding: 3px 2px;
+  cursor: pointer;
+  font-size: 10px;
+  text-align: center;
+  color: #8a8;
+  font-family: inherit;
+  transition: border-color 0.12s, color 0.12s;
+}
+.support-buy-btn:hover { border-color: #4a8;  color: #afa; }
+#weaponRow {
+  display: flex;
+  gap: 4px;
+}
+.weapon-slot-btn {
+  flex: 1;
+  background: #0d1b2a;
+  border: 1px solid #1e3a5f;
+  border-radius: 6px;
+  padding: 3px;
+  cursor: pointer;
+  font-size: 10px;
+  text-align: center;
+  color: #889;
+  font-family: inherit;
+  transition: border-color 0.12s;
+  line-height: 1.4;
+}
+.weapon-slot-btn:hover { border-color: #4af; color: #cef; }
+.weapon-slot-btn.switching { border-color: #ff8; color: #ff8; }
+/* Modals */
+#overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  z-index: 50;
+}
+#gamblingModal, #gameOverScreen {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #131928;
+  border-radius: 14px;
+  padding: 20px;
+  z-index: 60;
+  text-align: center;
+  min-width: 280px;
+  max-width: 90vw;
+}
+#gamblingModal { border: 2px solid #6633aa; }
+#gamblingModal h3 { color: #ffaa00; margin-bottom: 12px; font-size: 18px; }
+.gamble-opt {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #0d1220;
+  border: 1px solid #2a2a5a;
+  border-radius: 8px;
+  margin: 6px 0;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.gamble-opt:hover { background: #1a2240; border-color: #5555aa; }
+.bet-row { display: flex; align-items: center; gap: 8px; margin: 10px 0; }
+.bet-row label { font-size: 13px; color: #aaa; white-space: nowrap; }
+#betInput {
+  flex: 1;
+  background: #0d1220;
+  border: 1px solid #3355aa;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 15px;
+  text-align: center;
+  font-family: inherit;
+}
+#gameOverScreen { border: 3px solid #ff4444; }
+#gameOverScreen.victory { border-color: #44ff44; }
+#gameOverScreen h2 { font-size: 26px; margin-bottom: 10px; }
+#gameOverScreen p  { color: #aaa; font-size: 13px; }
+</style>
+</head>
+<body>
+<div id="gameWrapper">
+  <!-- HUD -->
+  <div id="hud">
+    <div class="hud-item">🪙<span id="hdGold">50</span></div>
+    <div class="hud-item">🌊<span id="hdWave">0/10</span></div>
+    <div class="hud-item">❤️<span id="hdHp">20</span></div>
+    <div class="hud-item">⏱️<span id="hdTime">3:00</span></div>
+  </div>
+
+  <!-- Battle Canvas -->
+  <canvas id="gameCanvas" width="480" height="480"></canvas>
+
+  <!-- Bottom UI -->
+  <div id="bottomUI">
+    <div id="buffsDisplay"></div>
+
+    <!-- Shop row -->
+    <div id="shopRow">
+      <button class="btn pack-normal" id="buyPackBtn" onclick="buyPack()">🎁 卡包 5g</button>
+      <button class="btn gamble-btn"  id="gamblingBtn" onclick="openGambling()" disabled>🎲 赌博</button>
+      <div style="flex:1"></div>
+      <span id="gamblesLeftLabel" style="font-size:11px;color:#888;white-space:nowrap">赌博:3次</span>
+      <button class="btn wave-btn" id="waveBtn" onclick="startNextWave()">▶ 第1波</button>
+    </div>
+
+    <!-- Card hand -->
+    <div id="cardArea">
+      <div class="empty-hint">购买卡包获得卡牌 · 点选后点击使用 · 点两张相同牌合成升级</div>
+    </div>
+
+    <!-- Support -->
+    <div id="supportRow">
+      <span style="font-size:10px;color:#666;white-space:nowrap">支援:</span>
+      <button class="support-buy-btn" onclick="buySupportUnit(0)">🔫突击兵<br>15g</button>
+      <button class="support-buy-btn" onclick="buySupportUnit(1)">🎯狙击手<br>25g</button>
+      <button class="support-buy-btn" onclick="buySupportUnit(2)">💣掷弹手<br>30g</button>
+      <button class="support-buy-btn" onclick="buySupportUnit(3)">🔮法师<br>40g</button>
+    </div>
+
+    <!-- Weapon slots -->
+    <div id="weaponRow">
+      <div class="weapon-slot-btn" id="wslot0" onclick="cycleWeapon(0)">槽0<br>🔫机枪</div>
+      <div class="weapon-slot-btn" id="wslot1" onclick="cycleWeapon(1)">槽1<br>🎯狙击</div>
+      <div class="weapon-slot-btn" id="wslot2" onclick="cycleWeapon(2)">槽2<br>⚡激光</div>
+      <div class="weapon-slot-btn" id="wslot3" onclick="cycleWeapon(3)">槽3<br>🚀火箭</div>
+    </div>
+  </div>
+</div>
+
+<!-- Gambling Modal -->
+<div id="overlay" onclick="closeGambling()"></div>
+<div id="gamblingModal">
+  <h3>🎲 幸运转盘</h3>
+  <div class="bet-row">
+    <label>投注:</label>
+    <input type="number" id="betInput" value="10" min="1">
+    <span style="font-size:12px;color:#888">金币</span>
+  </div>
+  <div style="font-size:11px;color:#666;margin-bottom:6px">剩余次数: <span id="gamblesLeft">3</span>/3 &nbsp;|&nbsp; 最多投注50%金币</div>
+  <div class="gamble-opt" onclick="doGamble('conservative')">
+    <span>😊 保守</span><span style="color:#44ff44">×1.5</span><span style="color:#888;font-size:12px">胜率70%</span>
+  </div>
+  <div class="gamble-opt" onclick="doGamble('balanced')">
+    <span>⚖️ 平衡</span><span style="color:#ffaa00">×2.0</span><span style="color:#888;font-size:12px">胜率50%</span>
+  </div>
+  <div class="gamble-opt" onclick="doGamble('aggressive')">
+    <span>🔥 激进</span><span style="color:#ff4444">×3.0</span><span style="color:#888;font-size:12px">胜率30%</span>
+  </div>
+  <button class="btn" onclick="closeGambling()" style="margin-top:10px;width:100%">取消</button>
+</div>
+
+<!-- Game Over -->
+<div id="gameOverScreen">
+  <h2 id="goTitle">游戏结束</h2>
+  <p id="goMsg"></p>
+  <button class="btn" onclick="location.reload()" style="margin-top:16px;width:100%">再来一局</button>
+</div>
+
+<script>
+'use strict';
+// ============================================================
+// CONSTANTS
+// ============================================================
+const CW = 480, CH = 480;
+const FIELD_L = 60, FIELD_R = 420;
+const SPAWN_Y  = 30;
+const WEAPON_Y = 400;
+const DEFENSE_Y = 430;
+
+const SUPPORT_ROWS_Y = [120, 220]; // two rows
+
+const WEAPON_DEFS = [
+  { name:'机枪', icon:'🔫', dmg:8,   rate:150,  range:300, type:'mg'     },
+  { name:'狙击', icon:'🎯', dmg:50,  rate:1200, range:500, type:'sniper', pierce:true },
+  { name:'激光', icon:'⚡', dmg:3,   rate:40,   range:250, type:'laser'  },
+  { name:'火箭', icon:'🚀', dmg:30,  rate:800,  range:350, type:'rocket', aoe:true, aoeR:60 },
+];
+
+const SUPPORT_DEFS = [
+  { name:'突击兵', icon:'🔫', dmg:15,  shots:20, range:180, rate:400,  cost:15 },
+  { name:'狙击手', icon:'🎯', dmg:60,  shots:5,  range:350, rate:1000, cost:25, pierce:true },
+  { name:'掷弹手', icon:'💣', dmg:40,  shots:8,  range:230, rate:600,  cost:30, aoe:true, aoeR:50 },
+  { name:'法师',   icon:'🔮', dmg:100, shots:3,  range:300, rate:1500, cost:40, aoe:true, aoeR:80 },
+];
+
+const CARD_DEFS = [
+  { id:'damage', name:'火力强化', icon:'⚔️', type:'buff',    stat:'damage', fx:[0.20, 0.50, 1.20] },
+  { id:'speed',  name:'急速射击', icon:'⚡', type:'buff',    stat:'speed',  fx:[0.15, 0.37, 0.90] },
+  { id:'range',  name:'射程扩展', icon:'🔭', type:'buff',    stat:'range',  fx:[0.25, 0.62, 1.50] },
+  { id:'gold',   name:'赏金猎人', icon:'🪙', type:'buff',    stat:'gold',   fx:[0.30, 0.75, 1.80] },
+  { id:'bomb',   name:'全屏轰炸', icon:'💥', type:'instant', fx:[100, 250, 600] },
+  { id:'freeze', name:'时间冻结', icon:'❄️', type:'instant', fx:[3000, 7000, 15000] },
+  { id:'heal',   name:'紧急维修', icon:'💖', type:'instant', fx:[5, 12, 30] },
+  { id:'slow',   name:'群体减速', icon:'🐌', type:'instant', fx:[0.3, 0.5, 0.7], dur:[5000,8000,15000] },
+];
+
+const PACK_THRESHOLDS = [0, 5, 15, 30];
+const PACK_NAMES      = ['普通','高级','稀有','史诗'];
+const PACK_CSS        = ['pack-normal','pack-advanced','pack-rare','pack-epic'];
+
+const ENEMY_DEFS = {
+  normal:   { color:'#ff5555', emoji:'🔴', hp:30,  spd:1.5, gold:3,  r:10 },
+  fast:     { color:'#5555ff', emoji:'🔵', hp:15,  spd:3.0, gold:4,  r:8  },
+  tank:     { color:'#44cc44', emoji:'🟢', hp:100, spd:0.8, gold:8,  r:15 },
+  healer:   { color:'#44ff88', emoji:'💚', hp:50,  spd:1.2, gold:6,  r:10, healer:true },
+  splitter: { color:'#888888', emoji:'⚫', hp:40,  spd:1.5, gold:5,  r:11, splitter:true },
+  shield:   { color:'#aaaaff', emoji:'🛡️', hp:60,  spd:1.0, gold:7,  r:12, shieldHp:30 },
+  boss:     { color:'#ff8800', emoji:'👹', hp:500, spd:0.5, gold:50, r:24, isBoss:true },
+};
+
+const WAVES = [
+  [{t:'normal',n:5}],
+  [{t:'normal',n:8}],
+  [{t:'normal',n:5},{t:'fast',n:3}],
+  [{t:'normal',n:4},{t:'fast',n:3},{t:'tank',n:1}],
+  [{t:'normal',n:5},{t:'boss',n:1}],
+  [{t:'fast',n:5},{t:'tank',n:2},{t:'healer',n:1}],
+  [{t:'normal',n:4},{t:'splitter',n:3},{t:'shield',n:2}],
+  [{t:'normal',n:6},{t:'tank',n:3},{t:'boss',n:1}],
+  [{t:'fast',n:6},{t:'tank',n:3},{t:'splitter',n:2},{t:'shield',n:2}],
+  [{t:'normal',n:5},{t:'fast',n:5},{t:'tank',n:3},{t:'boss',n:2}],
+];
+
+// ============================================================
+// STATE
+// ============================================================
+const G = {
+  gold: 50, hp: 20, wave: 0, maxWave: 10,
+  gameTime: 180,   // seconds
+  running: false, over: false,
+
+  enemies: [], bullets: [], particles: [],
+
+  weapons: [
+    {ti:0, lv:1, cd:0, switchCd:0},
+    {ti:1, lv:1, cd:0, switchCd:0},
+    {ti:2, lv:1, cd:0, switchCd:0},
+    {ti:3, lv:1, cd:0, switchCd:0},
+  ],
+  supports: [null, null, null, null], // L0, L1, R0, R1
+
+  cards: [], selCard: -1,
+  buffs: {damage:0, speed:0, range:0, gold:0},
+
+  packPrice: 5, packBuys: 0, packLv: 0,
+  gamblesLeft: 3,
+
+  freezeMs: 0, slowMs: 0, slowAmt: 0,
+
+  waveActive: false, spawnQueue: [], spawnTimer: 0,
+  eidSeq: 0, lastTime: 0,
+
+  msg: '', msgTimer: 0,
+};
+
+// ============================================================
+// CANVAS
+// ============================================================
+const canvas = document.getElementById('gameCanvas');
+const ctx    = canvas.getContext('2d');
+
+// ============================================================
+// HELPERS
+// ============================================================
+function rnd(a, b) { return a + Math.random() * (b - a); }
+function dist(ax,ay,bx,by) { return Math.hypot(ax-bx, ay-by); }
+function weaponX(i) {
+  // 4 weapons evenly spaced in center field
+  const step = (FIELD_R - FIELD_L) / 5;
+  return FIELD_L + step * (i + 1);
+}
+function supportPos(i) {
+  // 0,1 = left side; 2,3 = right side
+  const x  = i < 2 ? 30 : CW - 30;
+  const y  = SUPPORT_ROWS_Y[i % 2];
+  return {x, y, left: i < 2};
+}
+
+// ============================================================
+// INIT
+// ============================================================
+function init() {
+  updateHUD();
+  updateWeaponUI();
+  updateBuffsDisplay();
+  updateGamblingBtn();
+  requestAnimationFrame(gameLoop);
+}
+
+// ============================================================
+// GAME LOOP
+// ============================================================
+function gameLoop(ts) {
+  const dt = G.lastTime ? Math.min(ts - G.lastTime, 50) : 0;
+  G.lastTime = ts;
+
+  if (!G.over) {
+    if (G.running) update(dt);
+    render();
+  }
+  requestAnimationFrame(gameLoop);
+}
+
+// ============================================================
+// UPDATE
+// ============================================================
+function update(dt) {
+  G.gameTime -= dt / 1000;
+  if (G.gameTime < 0) G.gameTime = 0;
+
+  if (G.freezeMs > 0) G.freezeMs -= dt;
+  if (G.slowMs   > 0) { G.slowMs -= dt; if (G.slowMs <= 0) { G.slowMs = 0; G.slowAmt = 0; } }
+  if (G.msgTimer > 0) G.msgTimer -= dt;
+
+  // Spawn
+  if (G.waveActive && G.spawnQueue.length > 0) {
+    G.spawnTimer -= dt;
+    if (G.spawnTimer <= 0) {
+      const e = G.spawnQueue.shift();
+      spawnEnemy(e.type, e.wave);
+      G.spawnTimer = 1100;
+    }
+  }
+  // Wave complete?
+  if (G.waveActive && G.spawnQueue.length === 0 && G.enemies.length === 0) {
+    waveComplete();
+  }
+
+  updateEnemies(dt);
+  updateWeapons(dt);
+  updateSupport(dt);
+  updateBullets(dt);
+  updateParticles(dt);
+
+  for (const w of G.weapons) if (w.switchCd > 0) w.switchCd -= dt;
+
+  updateHUD();
+}
+
+// ============================================================
+// ENEMIES
+// ============================================================
+function spawnEnemy(type, waveNum) {
+  const def = ENEMY_DEFS[type];
+  const hpScale = 1 + (waveNum - 1) * 0.2;
+  G.enemies.push({
+    id: G.eidSeq++, type, def,
+    x: rnd(FIELD_L + def.r, FIELD_R - def.r),
+    y: SPAWN_Y,
+    hp: Math.round(def.hp * hpScale),
+    maxHp: Math.round(def.hp * hpScale),
+    shield: def.shieldHp || 0,
+  });
+}
+
+function updateEnemies(dt) {
+  const frozen  = G.freezeMs > 0;
+  const slowMul = frozen ? 0 : (1 - G.slowAmt);
+  const pxPerMs = dt / 16.67;
+
+  for (let i = G.enemies.length - 1; i >= 0; i--) {
+    const e = G.enemies[i];
+
+    if (!frozen) {
+      e.y += e.def.spd * slowMul * pxPerMs;
+    }
+
+    // Healer aura
+    if (e.def.healer) {
+      for (const o of G.enemies) {
+        if (o !== e && dist(e.x,e.y,o.x,o.y) < 80) {
+          o.hp = Math.min(o.maxHp, o.hp + 0.4 * pxPerMs);
+        }
+      }
+    }
+
+    // Hit defense line
+    if (e.y >= DEFENSE_Y) {
+      G.hp--;
+      burst(e.x, DEFENSE_Y, '#ff4444', 4);
+      G.enemies.splice(i, 1);
+      if (G.hp <= 0) { triggerGameOver(false); return; }
+      updateHUD();
+    }
+  }
+}
+
+// ============================================================
+// WEAPONS
+// ============================================================
+function updateWeapons(dt) {
+  for (let i = 0; i < 4; i++) {
+    const w = G.weapons[i];
+    w.cd -= dt;
+    if (w.cd > 0) continue;
+
+    const def    = WEAPON_DEFS[w.ti];
+    const rangeMul  = 1 + G.buffs.range;
+    const speedMul  = 1 + G.buffs.speed;
+    const dmgMul    = 1 + G.buffs.damage;
+    const range  = def.range * rangeMul;
+    const wx     = weaponX(i), wy = WEAPON_Y;
+
+    // Find target: prefer most advanced (highest y) in range
+    let tgt = null, bestY = -1;
+    for (const e of G.enemies) {
+      if (dist(wx, wy, e.x, e.y) <= range && e.y > bestY) {
+        bestY = e.y; tgt = e;
+      }
+    }
+    if (!tgt) continue;
+
+    const dmg = def.dmg * w.lv * dmgMul;
+    w.cd = def.rate / speedMul;
+
+    if (def.type === 'laser') {
+      dealDmg(tgt, dmg);
+      G.particles.push({type:'laser', x1:wx,y1:wy,x2:tgt.x,y2:tgt.y, life:60, maxLife:60});
+      w.cd = def.rate;
+    } else if (def.type === 'rocket') {
+      fireBullet(wx, wy, tgt, dmg, {btype:'rocket', spd:5, aoe:true, aoeR: def.aoeR * rangeMul});
+    } else if (def.type === 'sniper') {
+      fireBullet(wx, wy, tgt, dmg, {btype:'sniper', spd:12, pierce:true});
+    } else {
+      fireBullet(wx, wy, tgt, dmg, {btype:'bullet', spd:7});
+    }
+  }
+}
+
+function fireBullet(fx, fy, tgt, dmg, opts) {
+  const dx = tgt.x - fx, dy = tgt.y - fy;
+  const d  = Math.hypot(dx, dy) || 1;
+  G.bullets.push({
+    x:fx, y:fy,
+    vx: dx/d * opts.spd,
+    vy: dy/d * opts.spd,
+    tid: tgt.id, dmg,
+    btype: opts.btype || 'bullet',
+    pierce: !!opts.pierce,
+    aoe:    !!opts.aoe,
+    aoeR:   opts.aoeR || 0,
+  });
+}
+
+function updateBullets(dt) {
+  const pxPerMs = dt / 16.67;
+  for (let i = G.bullets.length - 1; i >= 0; i--) {
+    const b = G.bullets[i];
+    b.x += b.vx * pxPerMs;
+    b.y += b.vy * pxPerMs;
+
+    if (b.x < -20 || b.x > CW+20 || b.y < -20 || b.y > CH+20) {
+      G.bullets.splice(i, 1); continue;
+    }
+
+    const r = b.btype === 'rocket' ? 6 : 4;
+    let hit = false;
+    for (let j = G.enemies.length - 1; j >= 0; j--) {
+      const e = G.enemies[j];
+      if (dist(b.x, b.y, e.x, e.y) < e.def.r + r) {
+        if (b.aoe) {
+          explode(b.x, b.y, b.aoeR, b.dmg);
+          G.bullets.splice(i, 1);
+          hit = true; break;
+        } else {
+          dealDmg(e, b.dmg);
+          if (!b.pierce) { G.bullets.splice(i, 1); hit = true; break; }
+        }
+      }
+    }
+  }
+}
+
+function explode(x, y, r, dmg) {
+  burst(x, y, '#ff8800', 10);
+  for (let j = G.enemies.length - 1; j >= 0; j--) {
+    if (dist(x, y, G.enemies[j].x, G.enemies[j].y) <= r)
+      dealDmg(G.enemies[j], dmg);
+  }
+}
+
+function dealDmg(e, dmg) {
+  if (e.shield > 0) {
+    e.shield -= dmg;
+    burst(e.x, e.y, '#aaaaff', 2);
+    if (e.shield > 0) return false;
+    dmg = -e.shield; e.shield = 0;
+  }
+  e.hp -= dmg;
+  burst(e.x, e.y, '#ffff88', 2);
+  if (e.hp <= 0) { killEnemy(e); return true; }
+  return false;
+}
+
+function killEnemy(e) {
+  const idx = G.enemies.indexOf(e);
+  if (idx === -1) return;
+  const goldMul = 1 + G.buffs.gold;
+  G.gold += Math.round(e.def.gold * goldMul);
+  burst(e.x, e.y, e.def.color, 8);
+  if (e.def.splitter) {
+    for (let k = 0; k < 2; k++) {
+      G.enemies.push({
+        id: G.eidSeq++, type:'normal', def: ENEMY_DEFS.normal,
+        x: e.x + (k ? 14 : -14), y: e.y,
+        hp:10, maxHp:10, shield:0,
+      });
+    }
+  }
+  G.enemies.splice(idx, 1);
+  updateGamblingBtn();
+}
+
+// ============================================================
+// SUPPORT
+// ============================================================
+function updateSupport(dt) {
+  for (let i = 0; i < 4; i++) {
+    const s = G.supports[i];
+    if (!s) continue;
+    s.cd -= dt;
+    if (s.cd > 0) continue;
+
+    const def    = SUPPORT_DEFS[s.ti];
+    const pos    = supportPos(i);
+    const rangeMul = 1 + G.buffs.range;
+    const range  = def.range * rangeMul;
+
+    // Find target within horizontal band
+    let tgt = null, bestDist = range;
+    for (const e of G.enemies) {
+      const d = dist(pos.x, pos.y, e.x, e.y);
+      if (d < bestDist && Math.abs(e.y - pos.y) < 90) {
+        bestDist = d; tgt = e;
+      }
+    }
+    if (!tgt) continue;
+
+    s.cd = def.rate; s.shots--;
+    const dmgMul = 1 + G.buffs.damage;
+    const dmg    = def.dmg * dmgMul;
+
+    if (def.aoe) {
+      fireBullet(pos.x, pos.y, tgt, dmg, {btype:'rocket', spd:5, aoe:true, aoeR:(def.aoeR||50)*rangeMul});
+    } else {
+      fireBullet(pos.x, pos.y, tgt, dmg, {btype:'bullet', spd:8, pierce:!!def.pierce});
+    }
+
+    if (s.shots <= 0) G.supports[i] = null;
+  }
+}
+
+function buySupportUnit(ti) {
+  const def = SUPPORT_DEFS[ti];
+  if (G.gold < def.cost) { flash(`金币不足! 需要 ${def.cost}g`); return; }
+  const slot = G.supports.indexOf(null);
+  if (slot === -1) { flash('支援槽已满!'); return; }
+  G.gold -= def.cost;
+  G.supports[slot] = { ti, shots: def.shots, cd: 0 };
+  flash(`部署 ${def.icon} ${def.name}`);
+  updateHUD();
+}
+
+// ============================================================
+// PARTICLES
+// ============================================================
+function burst(x, y, color, n) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const spd = 1 + Math.random() * 3;
+    G.particles.push({
+      type:'spark', x, y,
+      vx: Math.cos(a)*spd, vy: Math.sin(a)*spd,
+      life:300, maxLife:300, color, r:3
+    });
+  }
+}
+
+function updateParticles(dt) {
+  const mul = dt / 16.67;
+  for (let i = G.particles.length - 1; i >= 0; i--) {
+    const p = G.particles[i];
+    p.life -= dt;
+    if (p.life <= 0) { G.particles.splice(i,1); continue; }
+    if (p.type === 'spark') {
+      p.x += p.vx * mul; p.y += p.vy * mul;
+      p.vx *= 0.93; p.vy *= 0.93;
+    }
+  }
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function render() {
+  ctx.clearRect(0, 0, CW, CH);
+
+  // BG gradient
+  const grad = ctx.createLinearGradient(0,0,0,CH);
+  grad.addColorStop(0, '#0d1520');
+  grad.addColorStop(1, '#0a1018');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,CW,CH);
+
+  drawField();
+  drawParticles();
+  drawBullets();
+  drawSupport();
+  drawEnemies();
+  drawWeapons();
+  drawHUDCanvas();
+
+  if (!G.running && G.wave === 0) {
+    ctx.font = 'bold 18px sans-serif';
+    ctx.fillStyle = '#88ffaa';
+    ctx.textAlign = 'center';
+    ctx.fillText('点击 "▶ 第1波" 开始游戏', CW/2, CH/2 - 10);
+    ctx.font = '12px sans-serif';
+    ctx.fillStyle = '#556';
+    ctx.fillText('部署支援 · 购买卡包 · 组合强化', CW/2, CH/2 + 14);
+  }
+}
+
+function drawField() {
+  // Field boundary
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4,6]);
+  ctx.beginPath();
+  ctx.moveTo(FIELD_L, SPAWN_Y); ctx.lineTo(FIELD_L, DEFENSE_Y);
+  ctx.moveTo(FIELD_R, SPAWN_Y); ctx.lineTo(FIELD_R, DEFENSE_Y);
+  ctx.stroke(); ctx.setLineDash([]);
+
+  // Spawn zone
+  ctx.fillStyle = 'rgba(255,80,80,0.07)';
+  ctx.fillRect(FIELD_L, 0, FIELD_R-FIELD_L, SPAWN_Y + 10);
+  ctx.font = '10px sans-serif';
+  ctx.fillStyle = '#ff6666';
+  ctx.textAlign = 'center';
+  ctx.fillText('↓  怪物生成区  ↓', CW/2, 18);
+
+  // Support fire lines
+  for (let i = 0; i < 4; i++) {
+    const p = supportPos(i);
+    ctx.strokeStyle = 'rgba(80,200,120,0.12)';
+    ctx.setLineDash([2,6]); ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(FIELD_L, p.y); ctx.lineTo(FIELD_R, p.y);
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  // Weapon platform line
+  ctx.strokeStyle = 'rgba(255,200,60,0.25)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(FIELD_L-10, WEAPON_Y-22);
+  ctx.lineTo(FIELD_R+10, WEAPON_Y-22);
+  ctx.stroke();
+
+  // Defense line
+  ctx.strokeStyle = '#ff4444';
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(0, DEFENSE_Y); ctx.lineTo(CW, DEFENSE_Y); ctx.stroke();
+  ctx.font = 'bold 10px sans-serif';
+  ctx.fillStyle = '#ff6666';
+  ctx.textAlign = 'right';
+  ctx.fillText('— 防 线 —', CW-4, DEFENSE_Y - 4);
+}
+
+function drawEnemies() {
+  const frozen = G.freezeMs > 0;
+  for (const e of G.enemies) {
+    const r = e.def.r;
+    // Shadow
+    ctx.beginPath();
+    ctx.ellipse(e.x, e.y + r, r*0.7, 3, 0, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fill();
+
+    // Body
+    ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI*2);
+    ctx.fillStyle = frozen ? '#aaddff' : (G.slowAmt > 0.2 ? '#8888dd' : e.def.color);
+    ctx.fill();
+    if (e.def.isBoss) {
+      ctx.strokeStyle = '#ff8800'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI*2); ctx.stroke();
+    }
+
+    // Shield ring
+    if (e.shield > 0) {
+      ctx.beginPath(); ctx.arc(e.x, e.y, r+4, 0, Math.PI*2);
+      ctx.strokeStyle = '#aaaaff'; ctx.lineWidth = 2.5; ctx.stroke();
+    }
+
+    // Emoji
+    ctx.font = `${r*1.2}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(e.def.emoji, e.x, e.y + r*0.4);
+
+    // HP bar
+    const bw = r*2+4, bh = 4, bx = e.x-r-2, by = e.y-r-8;
+    ctx.fillStyle = '#222'; ctx.fillRect(bx, by, bw, bh);
+    const hp = e.hp / e.maxHp;
+    ctx.fillStyle = hp > 0.5 ? '#44ff44' : hp > 0.25 ? '#ffaa00' : '#ff4444';
+    ctx.fillRect(bx, by, bw * hp, bh);
+    if (e.shield > 0) {
+      const sd = ENEMY_DEFS[e.type].shieldHp || 30;
+      ctx.fillStyle = 'rgba(150,150,255,0.6)';
+      ctx.fillRect(bx, by, bw * (e.shield / sd), bh);
+    }
+
+    // Boss crown
+    if (e.def.isBoss) {
+      ctx.font = '12px sans-serif';
+      ctx.fillText('👑', e.x, e.y - r - 10);
+    }
+  }
+
+  // Freeze overlay
+  if (G.freezeMs > 0) {
+    ctx.fillStyle = 'rgba(80,180,255,0.08)';
+    ctx.fillRect(0, SPAWN_Y, CW, DEFENSE_Y - SPAWN_Y);
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillStyle = '#88ddff';
+    ctx.textAlign = 'center';
+    ctx.fillText(`❄️ 冻结 ${(G.freezeMs/1000).toFixed(1)}s`, CW/2, SPAWN_Y+30);
+  }
+  if (G.slowAmt > 0 && G.slowMs > 0) {
+    ctx.font = '12px sans-serif';
+    ctx.fillStyle = '#8888dd';
+    ctx.textAlign = 'center';
+    ctx.fillText(`🐌 减速${Math.round(G.slowAmt*100)}% ${(G.slowMs/1000).toFixed(1)}s`, CW/2, SPAWN_Y+48);
+  }
+}
+
+function drawBullets() {
+  for (const b of G.bullets) {
+    ctx.beginPath();
+    if (b.btype === 'rocket') {
+      ctx.arc(b.x, b.y, 5, 0, Math.PI*2);
+      ctx.fillStyle = '#ff8800';
+    } else if (b.btype === 'sniper') {
+      ctx.arc(b.x, b.y, 4, 0, Math.PI*2);
+      ctx.fillStyle = '#00ffff';
+    } else {
+      ctx.arc(b.x, b.y, 3, 0, Math.PI*2);
+      ctx.fillStyle = '#ffff88';
+    }
+    ctx.fill();
+  }
+}
+
+function drawParticles() {
+  for (const p of G.particles) {
+    if (p.type === 'laser') {
+      const a = p.life / p.maxLife;
+      ctx.strokeStyle = `rgba(100,255,100,${a*0.9})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(p.x1,p.y1); ctx.lineTo(p.x2,p.y2); ctx.stroke();
+    } else {
+      const a = p.life / p.maxLife;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r*a, 0, Math.PI*2);
+      const hex = Math.round(a*255).toString(16).padStart(2,'0');
+      ctx.fillStyle = p.color + hex;
+      ctx.fill();
+    }
+  }
+}
+
+function drawWeapons() {
+  for (let i = 0; i < 4; i++) {
+    const w   = G.weapons[i];
+    const def = WEAPON_DEFS[w.ti];
+    const x   = weaponX(i), y = WEAPON_Y;
+
+    // Range circle
+    const range = def.range * (1 + G.buffs.range);
+    ctx.beginPath(); ctx.arc(x, y, range, 0, Math.PI*2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.03)'; ctx.lineWidth = 1; ctx.stroke();
+
+    // Platform
+    const switching = w.switchCd > 0;
+    ctx.fillStyle   = switching ? '#2a2a00' : '#152535';
+    ctx.strokeStyle = switching ? '#ffff00' : '#2a5a8a';
+    ctx.lineWidth   = 2;
+    ctx.beginPath(); ctx.roundRect(x-18, y-18, 36, 36, 6); ctx.fill(); ctx.stroke();
+
+    // Icon
+    ctx.font = '22px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(def.icon, x, y+8);
+
+    // Level
+    ctx.font = 'bold 9px sans-serif'; ctx.fillStyle = '#ffdd00';
+    ctx.fillText(`Lv${w.lv}`, x, y-8);
+
+    if (switching) {
+      ctx.font = '8px sans-serif'; ctx.fillStyle = '#ffff00';
+      ctx.fillText('切换中', x, y+26);
+    }
+  }
+}
+
+function drawSupport() {
+  for (let i = 0; i < 4; i++) {
+    const pos = supportPos(i);
+    const s   = G.supports[i];
+
+    if (s) {
+      const def = SUPPORT_DEFS[s.ti];
+      ctx.fillStyle = '#0d2a10'; ctx.strokeStyle = '#2a7a2a'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.roundRect(pos.x-18, pos.y-18, 36, 36, 6); ctx.fill(); ctx.stroke();
+      ctx.font = '18px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(def.icon, pos.x, pos.y+6);
+      ctx.font = 'bold 9px sans-serif'; ctx.fillStyle = '#aaffaa';
+      ctx.fillText(s.shots, pos.x, pos.y-8);
+      // Arrow showing fire direction
+      ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(150,255,150,0.35)';
+      ctx.fillText(pos.left ? '→' : '←', pos.x + (pos.left ? 26 : -26), pos.y+4);
+    } else {
+      ctx.strokeStyle = 'rgba(60,120,60,0.3)'; ctx.lineWidth = 1;
+      ctx.setLineDash([3,3]);
+      ctx.beginPath(); ctx.roundRect(pos.x-18, pos.y-18, 36, 36, 6); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = '9px sans-serif'; ctx.fillStyle = 'rgba(60,120,60,0.4)'; ctx.textAlign = 'center';
+      ctx.fillText(i<2 ? 'L'+(i) : 'R'+(i-2), pos.x, pos.y+3);
+    }
+  }
+}
+
+function drawHUDCanvas() {
+  // Wave counter during battle
+  if (G.waveActive) {
+    const rem = G.spawnQueue.length + G.enemies.length;
+    if (rem > 0) {
+      ctx.font = 'bold 11px sans-serif'; ctx.fillStyle = '#ff8888'; ctx.textAlign = 'left';
+      ctx.fillText(`剩余敌人: ${rem}`, FIELD_L, SPAWN_Y + 14);
+    }
+  }
+  // Message
+  if (G.msg && G.msgTimer > 0) {
+    const a = Math.min(1, G.msgTimer / 600);
+    ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 5;
+    ctx.fillStyle = `rgba(255,255,100,${a})`;
+    ctx.fillText(G.msg, CW/2, SPAWN_Y + 28);
+    ctx.shadowBlur = 0;
+  }
+}
+
+// ============================================================
+// HUD
+// ============================================================
+function updateHUD() {
+  document.getElementById('hdGold').textContent = G.gold;
+  document.getElementById('hdWave').textContent = `${G.wave}/${G.maxWave}`;
+  document.getElementById('hdHp'  ).textContent = G.hp;
+  const m = Math.floor(G.gameTime/60), s = Math.floor(G.gameTime%60);
+  document.getElementById('hdTime').textContent = `${m}:${s.toString().padStart(2,'0')}`;
+
+  // Pack button
+  const pb = document.getElementById('buyPackBtn');
+  pb.textContent = `🎁 ${PACK_NAMES[G.packLv]} ${G.packPrice}g`;
+  pb.disabled = G.gold < G.packPrice || G.cards.length >= 6 || G.over;
+  pb.className = `btn ${PACK_CSS[G.packLv]}`;
+
+  // Wave button
+  const wb = document.getElementById('waveBtn');
+  if (G.over)        { wb.disabled = true; wb.textContent = '已结束'; }
+  else if (G.waveActive) { wb.disabled = true; wb.textContent = '战斗中...'; }
+  else if (G.wave >= G.maxWave) { wb.disabled = true; wb.textContent = '已完成'; }
+  else { wb.disabled = false; wb.textContent = `▶ 第${G.wave+1}波`; }
+
+  // Gambles
+  document.getElementById('gamblesLeftLabel').textContent = `赌博:${G.gamblesLeft}次`;
+  updateGamblingBtn();
+}
+
+function updateGamblingBtn() {
+  const btn = document.getElementById('gamblingBtn');
+  btn.disabled = G.gold < G.packPrice*2 || G.gamblesLeft <= 0 || G.over;
+}
+
+function updateBuffsDisplay() {
+  const el = document.getElementById('buffsDisplay');
+  const tags = [];
+  if (G.buffs.damage > 0) tags.push(`⚔️ +${Math.round(G.buffs.damage*100)}%`);
+  if (G.buffs.speed  > 0) tags.push(`⚡ +${Math.round(G.buffs.speed*100)}%`);
+  if (G.buffs.range  > 0) tags.push(`🔭 +${Math.round(G.buffs.range*100)}%`);
+  if (G.buffs.gold   > 0) tags.push(`🪙 +${Math.round(G.buffs.gold*100)}%`);
+  el.innerHTML = tags.map(t=>`<span class="buff-tag">${t}</span>`).join('') || '';
+}
+
+function updateWeaponUI() {
+  for (let i = 0; i < 4; i++) {
+    const def = WEAPON_DEFS[G.weapons[i].ti];
+    const el  = document.getElementById(`wslot${i}`);
+    el.innerHTML = `槽${i}<br>${def.icon}${def.name}`;
+    el.className = 'weapon-slot-btn' + (G.weapons[i].switchCd > 0 ? ' switching' : '');
+  }
+}
+
+// ============================================================
+// WAVES
+// ============================================================
+function startNextWave() {
+  if (G.waveActive || G.wave >= G.maxWave || G.over) return;
+  G.wave++;
+  G.waveActive = true;
+  G.running    = true;
+
+  // Reset per-wave
+  G.packPrice  = 5;
+  G.packBuys   = 0;
+  G.packLv     = 0;
+  G.gamblesLeft = 3;
+
+  // Build spawn queue
+  G.spawnQueue = [];
+  for (const grp of WAVES[G.wave-1]) {
+    for (let i = 0; i < grp.n; i++)
+      G.spawnQueue.push({type: grp.t, wave: G.wave});
+  }
+  // Shuffle
+  G.spawnQueue.sort(() => Math.random()-0.5);
+  G.spawnTimer = 600;
+
+  flash(`第 ${G.wave} 波来袭！`);
+  updateHUD();
+}
+
+function waveComplete() {
+  G.waveActive = false;
+  if (G.wave >= G.maxWave) {
+    triggerGameOver(true); return;
+  }
+  flash(`✅ 第 ${G.wave} 波完成！准备下一波`);
+  updateHUD();
+}
+
+// ============================================================
+// CARDS
+// ============================================================
+function buyPack() {
+  if (G.gold < G.packPrice || G.cards.length >= 6 || G.over) return;
+  G.gold      -= G.packPrice;
+  G.packPrice += 2;
+  G.packBuys++;
+
+  // Update pack level
+  for (let i = PACK_THRESHOLDS.length-1; i >= 0; i--) {
+    if (G.packBuys >= PACK_THRESHOLDS[i]) { G.packLv = i; break; }
+  }
+
+  const newCards = [];
+  for (let i = 0; i < 3 && G.cards.length + newCards.length < 6; i++) {
+    newCards.push({
+      id: Math.random().toString(36).slice(2),
+      def: CARD_DEFS[Math.floor(Math.random()*CARD_DEFS.length)],
+      lv:  rollPackCardLevel(G.packLv),
+    });
+  }
+  G.cards.push(...newCards);
+
+  flash(`获得 ${newCards.map(c=>c.def.icon+' Lv'+c.lv).join('  ')}`);
+  updateHUD();
+  renderCards();
+}
+
+function rollPackCardLevel(packLv) {
+  const r = Math.random();
+  if (packLv === 0) return 1;
+  if (packLv === 1) return r < 0.70 ? 1 : 2;
+  if (packLv === 2) return r < 0.50 ? 1 : r < 0.90 ? 2 : 3;
+  return r < 0.30 ? 1 : r < 0.80 ? 2 : 3;
+}
+
+function selectCard(i) {
+  if (G.selCard === i) {
+    // Double-click/re-click = use
+    useCard(i); return;
+  }
+  if (G.selCard >= 0) {
+    // Try merge
+    if (tryMerge(G.selCard, i)) return;
+  }
+  G.selCard = i;
+  renderCards();
+  flash('再次点击使用，或点击另一张相同牌合成升级');
+}
+
+function useCard(i) {
+  const c = G.cards[i];
+  if (!c) return;
+  if (c.def.type === 'buff') {
+    G.buffs[c.def.stat] += c.def.fx[c.lv-1];
+    flash(`${c.def.icon} ${c.def.name} Lv${c.lv} 激活! +${Math.round(c.def.fx[c.lv-1]*100)}%`);
+    updateBuffsDisplay();
+  } else {
+    applyInstant(c);
+  }
+  G.cards.splice(i, 1);
+  G.selCard = -1;
+  updateHUD();
+  renderCards();
+}
+
+function applyInstant(c) {
+  const fx = c.def.fx[c.lv-1];
+  switch (c.def.id) {
+    case 'bomb':
+      for (let j = G.enemies.length-1; j >= 0; j--) dealDmg(G.enemies[j], fx);
+      flash(`💥 全屏轰炸 ${fx} 伤害!`); break;
+    case 'freeze':
+      G.freezeMs = fx;
+      flash(`❄️ 冻结 ${(fx/1000).toFixed(0)} 秒!`); break;
+    case 'heal':
+      G.hp = Math.min(20, G.hp + fx);
+      flash(`💖 恢复 ${fx} 生命! 当前 HP: ${G.hp}`);
+      updateHUD(); break;
+    case 'slow':
+      G.slowAmt = fx; G.slowMs = c.def.dur[c.lv-1];
+      flash(`🐌 减速 ${Math.round(fx*100)}%!`); break;
+  }
+}
+
+function tryMerge(i1, i2) {
+  const c1 = G.cards[i1], c2 = G.cards[i2];
+  if (!c1 || !c2 || c1===c2 || c1.def.id !== c2.def.id || c1.lv !== c2.lv || c1.lv >= 3) {
+    G.selCard = i2;
+    renderCards();
+    return false;
+  }
+  const newCard = { id: Math.random().toString(36).slice(2), def: c1.def, lv: c1.lv+1 };
+  const hi = Math.max(i1,i2), lo = Math.min(i1,i2);
+  G.cards.splice(hi, 1); G.cards.splice(lo, 1);
+  G.cards.splice(lo, 0, newCard);
+  G.selCard = -1;
+  flash(`✨ 合成! ${newCard.def.icon} ${newCard.def.name} → Lv${newCard.lv}`);
+  renderCards();
+  updateHUD();
+  return true;
+}
+
+function renderCards() {
+  const area = document.getElementById('cardArea');
+  if (G.cards.length === 0) {
+    area.innerHTML = '<div class="empty-hint">购买卡包获得卡牌 · 点选后点击使用 · 点两张相同牌合成升级</div>';
+    return;
+  }
+  area.innerHTML = '';
+  G.cards.forEach((c, i) => {
+    const d = document.createElement('div');
+    const sel = G.selCard === i ? ' selected' : '';
+    d.className = `card lv${c.lv}${sel}`;
+    d.innerHTML = `<div class="card-icon">${c.def.icon}</div><div class="card-name">${c.def.name}</div><div class="card-meta">Lv${c.lv} ${c.def.type==='buff'?'永久':'即时'}</div>`;
+    d.addEventListener('click', e => { e.stopPropagation(); selectCard(i); });
+    area.appendChild(d);
+  });
+}
+
+// ============================================================
+// GAMBLING
+// ============================================================
+function openGambling() {
+  if (G.gold < G.packPrice*2 || G.gamblesLeft <= 0 || G.over) return;
+  const maxBet = Math.floor(G.gold * 0.5);
+  document.getElementById('betInput').value  = Math.min(G.gold, G.packPrice*2);
+  document.getElementById('betInput').max    = maxBet;
+  document.getElementById('betInput').min    = G.packPrice;
+  document.getElementById('gamblesLeft').textContent = G.gamblesLeft;
+  document.getElementById('overlay').style.display       = 'block';
+  document.getElementById('gamblingModal').style.display = 'block';
+}
+function closeGambling() {
+  document.getElementById('overlay').style.display       = 'none';
+  document.getElementById('gamblingModal').style.display = 'none';
+}
+function doGamble(risk) {
+  const bet = parseInt(document.getElementById('betInput').value);
+  const maxBet = Math.floor(G.gold * 0.5);
+  if (!bet || bet < 1 || bet > G.gold || bet > maxBet) {
+    flash(`投注范围 1~${maxBet}g`); return;
+  }
+  G.gamblesLeft--;
+  closeGambling();
+  const cfg = {conservative:[0.7,1.5,'保守'],balanced:[0.5,2.0,'平衡'],aggressive:[0.3,3.0,'激进']}[risk];
+  const won = Math.random() < cfg[0];
+  if (won) {
+    const earn = Math.round(bet * cfg[1]);
+    G.gold += earn;
+    flash(`🎰 ${cfg[2]}获胜! +${earn}g (×${cfg[1]})`);
+  } else {
+    G.gold -= bet;
+    flash(`🎰 ${cfg[2]}失败! -${bet}g`);
+  }
+  updateHUD();
+}
+
+// ============================================================
+// WEAPON CYCLING
+// ============================================================
+function cycleWeapon(i) {
+  const w = G.weapons[i];
+  if (w.switchCd > 0) { flash('武器冷却中...'); return; }
+  w.ti = (w.ti + 1) % WEAPON_DEFS.length;
+  w.switchCd = 3000;
+  w.cd = 0;
+  flash(`槽${i} → ${WEAPON_DEFS[w.ti].icon}${WEAPON_DEFS[w.ti].name}`);
+  updateWeaponUI();
+}
+
+// ============================================================
+// GAME OVER
+// ============================================================
+function triggerGameOver(win) {
+  G.over = true; G.running = false;
+  const scr = document.getElementById('gameOverScreen');
+  scr.className = win ? 'victory' : '';
+  document.getElementById('goTitle').textContent = win ? '🏆 胜利!' : '💀 防线失守!';
+  document.getElementById('goMsg').textContent   = win
+    ? `成功防守 ${G.maxWave} 波！最终生命 ${G.hp} 剩余金币 ${G.gold}`
+    : `防线在第 ${G.wave} 波被攻破`;
+  scr.style.display = 'block';
+}
+
+// ============================================================
+// FLASH MESSAGE
+// ============================================================
+function flash(msg) {
+  G.msg = msg; G.msgTimer = 2800;
+  console.log('[VD]', msg);
+}
+
+// ============================================================
+// MISC INPUT
+// ============================================================
+document.addEventListener('click', () => {
+  if (G.selCard >= 0) { G.selCard = -1; renderCards(); }
+});
+
+// ============================================================
+// START
+// ============================================================
+init();
+</script>
+</body>
+</html>
