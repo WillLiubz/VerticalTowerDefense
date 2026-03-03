@@ -246,7 +246,7 @@ body {
   </div>
 
   <!-- Battle Canvas -->
-  <canvas id="gameCanvas" width="480" height="480"></canvas>
+  <canvas id="gameCanvas" width="480" height="520"></canvas>
 
   <!-- Bottom UI -->
   <div id="bottomUI">
@@ -256,6 +256,7 @@ body {
     <div id="shopRow">
       <button class="btn pack-normal" id="buyPackBtn" onclick="buyPack()">🎁 卡包 5g</button>
       <button class="btn gamble-btn"  id="gamblingBtn" onclick="openGambling()" disabled>🎲 赌博</button>
+      <button class="btn" id="rulesBtn" onclick="openRules()">📘 规则</button>
       <div style="flex:1"></div>
       <span id="gamblesLeftLabel" style="font-size:11px;color:#888;white-space:nowrap">赌博:3次</span>
       <button class="btn wave-btn" id="waveBtn" onclick="startNextWave()">▶ 第1波</button>
@@ -275,18 +276,16 @@ body {
       <button class="support-buy-btn" onclick="buySupportUnit(3)">🔮法师<br>40g</button>
     </div>
 
-    <!-- Weapon slots -->
-    <div id="weaponRow">
-      <div class="weapon-slot-btn" id="wslot0" onclick="cycleWeapon(0)">槽0<br>🔫机枪</div>
-      <div class="weapon-slot-btn" id="wslot1" onclick="cycleWeapon(1)">槽1<br>🎯狙击</div>
-      <div class="weapon-slot-btn" id="wslot2" onclick="cycleWeapon(2)">槽2<br>⚡激光</div>
-      <div class="weapon-slot-btn" id="wslot3" onclick="cycleWeapon(3)">槽3<br>🚀火箭</div>
-    </div>
-  </div>
+    <!-- Card hand -->
+    <div id="cardArea">
+<div id="weaponSelectorModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#0f1722;border:2px solid #4466aa;border-radius:12px;padding:14px;z-index:70;max-width:90vw;">
+  <h3 style="color:#88ccff;margin-bottom:12px;">⚔️ 选择武器 (允许反复切换)</h3>
+  <div id="weaponSelectorContent" style="display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow-y:auto;"></div>
+  <button class="btn" onclick="closeWeaponSelector()" style="margin-top:12px;width:100%;">关闭</button>
 </div>
 
 <!-- Gambling Modal -->
-<div id="overlay" onclick="closeGambling()"></div>
+<div id="overlay" onclick="closeAllModals()"></div>
 <div id="gamblingModal">
   <h3>🎲 幸运转盘</h3>
   <div class="bet-row">
@@ -314,24 +313,119 @@ body {
   <button class="btn" onclick="location.reload()" style="margin-top:16px;width:100%">再来一局</button>
 </div>
 
+<!-- Rules Modal -->
+<div id="rulesModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#0f1722;border:2px solid #4466aa;border-radius:12px;padding:14px;z-index:70;max-width:90vw;max-height:80vh;overflow:auto;">
+  <h3 style="color:#88ccff;margin-bottom:8px">📘 游戏完整规则</h3>
+  <div id="rulesContent" style="white-space:pre-wrap;color:#ddd;font-size:13px;line-height:1.4;"></div>
+  <button class="btn" onclick="closeRules()" style="margin-top:12px;width:100%">关闭</button>
+</div>
+
 <script>
 'use strict';
 // ============================================================
-// CONSTANTS
+// RULES MODAL
 // ============================================================
-const CW = 480, CH = 480;
+const RULES_MD = `# Vertical Defense - 完整玩家规则
+
+## 武器切换（回到武器展示位置）
+- 操作说明：武器切换完成后，UI/镜头/角色焦点应回到"武器展示位置"。
+- 实现：切换完成触发回位过渡动画（位置、缩放、朝向同步），过渡时长：0.2–0.3s，缓动：ease-out。
+
+## 横向支援（左右区域回位 & 包装为"士兵"）
+- 操作说明：横向支援操控结束后，角色自动回到对应的左右预设站点（靠近左/右区边界）。
+- 实现：回位采用插值移动，站位目标为左右预设站点；过渡时长：0.25–0.35s。角色在 UI/数据包装中统一标记为"士兵"。
+`;
+
+function openRules() {
+  document.getElementById('rulesContent').textContent = RULES_MD.trim();
+  document.getElementById('overlay').style.display    = 'block';
+  document.getElementById('rulesModal').style.display = 'block';
+}
+function closeRules() {
+  document.getElementById('overlay').style.display    = 'none';
+  document.getElementById('rulesModal').style.display = 'none';
+}
+
+function closeAllModals() {
+  closeGambling();
+  closeRules();
+  closeWeaponSelector();
+}
+
+function openWeaponSelector() {
+  const container = document.getElementById('weaponSelectorContent');
+  container.innerHTML = '';
+  
+  for (let i = 0; i < WEAPON_DEFS.length; i++) {
+    const def = WEAPON_DEFS[i];
+    const lv = G.weaponLevels[i];
+    const isCurrent = G.curWeapon === i;
+    
+    const btn = document.createElement('button');
+    btn.className = 'btn' + (isCurrent ? ' active-weapon' : '');
+    btn.style.cssText = `
+      padding: 10px;
+      text-align: left;
+      border: 2px solid ${isCurrent ? '#88ff88' : '#2a5a8a'};
+      background: ${isCurrent ? '#0a2a0a' : '#0f1722'};
+      cursor: pointer;
+      transition: all 0.2s;
+    `;
+    btn.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;">
+      <span>${def.icon} <strong>${def.name}</strong> - Lv${lv}</span>
+      <span style="color:#aaa;font-size:12px;">
+        ${isCurrent ? '✓ 当前' : ''}
+      </span>
+    </div>
+    <div style="font-size:11px;color:#888;margin-top:4px;">
+      💥 伤害: ${def.dmg} | 💫 射速: ${def.rate}ms | 🎯 射程: ${def.range}
+    </div>`;
+    
+    btn.onclick = () => {
+      switchToWeapon(i);
+      openWeaponSelector(); // 重新刷新列表
+    };
+    
+    container.appendChild(btn);
+  }
+  
+  document.getElementById('overlay').style.display = 'block';
+  document.getElementById('weaponSelectorModal').style.display = 'block';
+}
+
+function closeWeaponSelector() {
+  document.getElementById('overlay').style.display = 'none';
+  document.getElementById('weaponSelectorModal').style.display = 'none';
+}
+
+function switchToWeapon(weaponIndex) {
+  if (G.weaponSwitchCd > 0) { flash('武器冷却中...'); return; }
+  if (G.curWeapon === weaponIndex) { flash('已经是这个武器'); return; }
+  
+  G.curWeapon = weaponIndex;
+  G.weaponSwitchCd = 3000;
+  G.weaponCd = 0;
+  
+  const def = WEAPON_DEFS[G.curWeapon];
+  const lv = G.weaponLevels[G.curWeapon];
+  flash(`✓ 切换至 ${def.icon}${def.name} (Lv${lv})`);
+  updateWeaponUI();
+}
+// ============================================================
+const CW = 480, CH = 520;
 const FIELD_L = 60, FIELD_R = 420;
 const SPAWN_Y  = 30;
 const WEAPON_Y = 400;
 const DEFENSE_Y = 430;
+const WEAPON_DISPLAY_Y = 360;  // 武器显示行的 Y 坐标（战场中部）
 
 const SUPPORT_ROWS_Y = [120, 220]; // two rows
 
 const WEAPON_DEFS = [
-  { name:'机枪', icon:'🔫', dmg:8,   rate:150,  range:300, type:'mg'     },
-  { name:'狙击', icon:'🎯', dmg:50,  rate:1200, range:500, type:'sniper', pierce:true },
-  { name:'激光', icon:'⚡', dmg:3,   rate:40,   range:250, type:'laser'  },
-  { name:'火箭', icon:'🚀', dmg:30,  rate:800,  range:350, type:'rocket', aoe:true, aoeR:60 },
+  { name:'机枪', icon:'🔫', dmg:8,   rate:150,  range:450, type:'mg',     lvMul:[1,1.3,1.7,2.2,2.8,3.5] },
+  { name:'狙击', icon:'🎯', dmg:50,  rate:1200, range:500, type:'sniper', pierce:true, lvMul:[1,1.2,1.5,1.9,2.4,3.0] },
+  { name:'激光', icon:'⚡', dmg:3,   rate:40,   range:400, type:'laser',  lvMul:[1,1.4,1.9,2.5,3.2,4.0] },
+  { name:'火箭', icon:'🚀', dmg:30,  rate:800,  range:450, type:'rocket', aoe:true, aoeR:60, lvMul:[1,1.25,1.6,2.0,2.5,3.1] },
 ];
 
 const SUPPORT_DEFS = [
@@ -389,12 +483,10 @@ const G = {
 
   enemies: [], bullets: [], particles: [],
 
-  weapons: [
-    {ti:0, lv:1, cd:0, switchCd:0},
-    {ti:1, lv:1, cd:0, switchCd:0},
-    {ti:2, lv:1, cd:0, switchCd:0},
-    {ti:3, lv:1, cd:0, switchCd:0},
-  ],
+  curWeapon: 0,  // 当前武器类型索引 (0-3)
+  weaponLevels: [1, 1, 1, 1],  // 每个武器的等级
+  weaponCd: 0,
+  weaponSwitchCd: 0,
   supports: [null, null, null, null], // L0, L1, R0, R1
 
   cards: [], selCard: -1,
@@ -422,10 +514,9 @@ const ctx    = canvas.getContext('2d');
 // ============================================================
 function rnd(a, b) { return a + Math.random() * (b - a); }
 function dist(ax,ay,bx,by) { return Math.hypot(ax-bx, ay-by); }
-function weaponX(i) {
-  // 4 weapons evenly spaced in center field
-  const step = (FIELD_R - FIELD_L) / 5;
-  return FIELD_L + step * (i + 1);
+function weaponX() {
+  // Single weapon in center
+  return (FIELD_L + FIELD_R) / 2;
 }
 function supportPos(i) {
   // 0,1 = left side; 2,3 = right side
@@ -438,11 +529,14 @@ function supportPos(i) {
 // INIT
 // ============================================================
 function init() {
+  console.log('[init] Starting initialization...');
   updateHUD();
   updateWeaponUI();
   updateBuffsDisplay();
   updateGamblingBtn();
+  console.log('[init] Requesting animation frame...');
   requestAnimationFrame(gameLoop);
+  console.log('[init] Done!');
 }
 
 // ============================================================
@@ -453,7 +547,10 @@ function gameLoop(ts) {
   G.lastTime = ts;
 
   if (!G.over) {
-    if (G.running) update(dt);
+    if (G.running) {
+      console.log('[gameLoop] Running update...');
+      update(dt);
+    }
     render();
   }
   requestAnimationFrame(gameLoop);
@@ -490,7 +587,7 @@ function update(dt) {
   updateBullets(dt);
   updateParticles(dt);
 
-  for (const w of G.weapons) if (w.switchCd > 0) w.switchCd -= dt;
+
 
   updateHUD();
 }
@@ -547,41 +644,43 @@ function updateEnemies(dt) {
 // WEAPONS
 // ============================================================
 function updateWeapons(dt) {
-  for (let i = 0; i < 4; i++) {
-    const w = G.weapons[i];
-    w.cd -= dt;
-    if (w.cd > 0) continue;
+  // Update cooldowns
+  if (G.weaponSwitchCd > 0) G.weaponSwitchCd -= dt;
+  G.weaponCd -= dt;
+  if (G.weaponCd > 0) return;
 
-    const def    = WEAPON_DEFS[w.ti];
-    const rangeMul  = 1 + G.buffs.range;
-    const speedMul  = 1 + G.buffs.speed;
-    const dmgMul    = 1 + G.buffs.damage;
-    const range  = def.range * rangeMul;
-    const wx     = weaponX(i), wy = WEAPON_Y;
+  const ti = G.curWeapon;
+  const def = WEAPON_DEFS[ti];
+  const lv = G.weaponLevels[ti];
+  const lvMul = def.lvMul[Math.min(lv - 1, def.lvMul.length - 1)];
 
-    // Find target: prefer most advanced (highest y) in range
-    let tgt = null, bestY = -1;
-    for (const e of G.enemies) {
-      if (dist(wx, wy, e.x, e.y) <= range && e.y > bestY) {
-        bestY = e.y; tgt = e;
-      }
+  const rangeMul  = 1 + G.buffs.range;
+  const speedMul  = 1 + G.buffs.speed;
+  const dmgMul    = 1 + G.buffs.damage;
+  const range  = def.range * rangeMul;
+  const wx     = weaponX(), wy = WEAPON_Y;
+
+  // Find target: prefer most advanced (highest y) in range
+  let tgt = null, bestY = -1;
+  for (const e of G.enemies) {
+    if (dist(wx, wy, e.x, e.y) <= range && e.y > bestY) {
+      bestY = e.y; tgt = e;
     }
-    if (!tgt) continue;
+  }
+  if (!tgt) return;
 
-    const dmg = def.dmg * w.lv * dmgMul;
-    w.cd = def.rate / speedMul;
+  const dmg = def.dmg * lvMul * dmgMul;
+  G.weaponCd = def.rate / speedMul;
 
-    if (def.type === 'laser') {
-      dealDmg(tgt, dmg);
-      G.particles.push({type:'laser', x1:wx,y1:wy,x2:tgt.x,y2:tgt.y, life:60, maxLife:60});
-      w.cd = def.rate;
-    } else if (def.type === 'rocket') {
-      fireBullet(wx, wy, tgt, dmg, {btype:'rocket', spd:5, aoe:true, aoeR: def.aoeR * rangeMul});
-    } else if (def.type === 'sniper') {
-      fireBullet(wx, wy, tgt, dmg, {btype:'sniper', spd:12, pierce:true});
-    } else {
-      fireBullet(wx, wy, tgt, dmg, {btype:'bullet', spd:7});
-    }
+  if (def.type === 'laser') {
+    dealDmg(tgt, dmg);
+    G.particles.push({type:'laser', x1:wx,y1:wy,x2:tgt.x,y2:tgt.y, life:60, maxLife:60});
+  } else if (def.type === 'rocket') {
+    fireBullet(wx, wy, tgt, dmg, {btype:'rocket', spd:5, aoe:true, aoeR: def.aoeR * rangeMul});
+  } else if (def.type === 'sniper') {
+    fireBullet(wx, wy, tgt, dmg, {btype:'sniper', spd:12, pierce:true});
+  } else {
+    fireBullet(wx, wy, tgt, dmg, {btype:'bullet', spd:7});
   }
 }
 
@@ -751,35 +850,52 @@ function updateParticles(dt) {
 // RENDER
 // ============================================================
 function render() {
-  ctx.clearRect(0, 0, CW, CH);
+  try {
+    ctx.clearRect(0, 0, CW, CH);
 
-  // BG gradient
-  const grad = ctx.createLinearGradient(0,0,0,CH);
-  grad.addColorStop(0, '#0d1520');
-  grad.addColorStop(1, '#0a1018');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0,0,CW,CH);
+    // BG gradient
+    const grad = ctx.createLinearGradient(0,0,0,CH);
+    grad.addColorStop(0, '#0d1520');
+    grad.addColorStop(1, '#0a1018');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,CW,CH);
 
-  drawField();
-  drawParticles();
-  drawBullets();
-  drawSupport();
-  drawEnemies();
-  drawWeapons();
-  drawHUDCanvas();
+    // Draw simple test rectangle
+    ctx.fillStyle = '#ff0000';
+    ctx.fillRect(10, 10, 50, 50);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillText('TEST', 20, 35);
 
-  if (!G.running && G.wave === 0) {
-    ctx.font = 'bold 18px sans-serif';
-    ctx.fillStyle = '#88ffaa';
-    ctx.textAlign = 'center';
-    ctx.fillText('点击 "▶ 第1波" 开始游戏', CW/2, CH/2 - 10);
+    // Only draw field for now
+    try {
+      console.log('[render] calling drawField');
+      drawField();
+      console.log('[render] drawField done');
+    } catch(e) {
+      console.error('[drawField error]', e.message);
+      ctx.fillText('Field Error: ' + e.message, 70, 30);
+    }
+
+    if (!G.running && G.wave === 0) {
+      ctx.font = 'bold 18px sans-serif';
+      ctx.fillStyle = '#88ffaa';
+      ctx.textAlign = 'center';
+      ctx.fillText('点击 "▶ 第1波" 开始游戏', CW/2, CH/2 - 10);
+      ctx.font = '12px sans-serif';
+      ctx.fillStyle = '#556';
+      ctx.fillText('部署支援 · 购买卡包 · 组合强化', CW/2, CH/2 + 14);
+    }
+  } catch (e) {
+    console.error('[Render Error]', e.message, e.stack);
+    ctx.fillStyle = '#ff0000';
     ctx.font = '12px sans-serif';
-    ctx.fillStyle = '#556';
-    ctx.fillText('部署支援 · 购买卡包 · 组合强化', CW/2, CH/2 + 14);
+    ctx.fillText('渲染错误: ' + e.message, 10, 50);
   }
 }
 
 function drawField() {
+  console.log('[drawField] called');
   // Field boundary
   ctx.strokeStyle = 'rgba(255,255,255,0.05)';
   ctx.lineWidth = 1;
@@ -926,36 +1042,86 @@ function drawParticles() {
 }
 
 function drawWeapons() {
-  for (let i = 0; i < 4; i++) {
-    const w   = G.weapons[i];
-    const def = WEAPON_DEFS[w.ti];
-    const x   = weaponX(i), y = WEAPON_Y;
+  const ti = G.curWeapon;
+  const def = WEAPON_DEFS[ti];
+  const lv = G.weaponLevels[ti];
+  const x = weaponX(), y = WEAPON_Y;
 
-    // Range circle
-    const range = def.range * (1 + G.buffs.range);
-    ctx.beginPath(); ctx.arc(x, y, range, 0, Math.PI*2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.03)'; ctx.lineWidth = 1; ctx.stroke();
+  // Range circle
+  const range = def.range * (1 + G.buffs.range);
+  ctx.beginPath(); ctx.arc(x, y, range, 0, Math.PI*2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.03)'; ctx.lineWidth = 1; ctx.stroke();
 
-    // Platform
-    const switching = w.switchCd > 0;
-    ctx.fillStyle   = switching ? '#2a2a00' : '#152535';
-    ctx.strokeStyle = switching ? '#ffff00' : '#2a5a8a';
-    ctx.lineWidth   = 2;
-    ctx.beginPath(); ctx.roundRect(x-18, y-18, 36, 36, 6); ctx.fill(); ctx.stroke();
+  // Platform - upgrade color based on level
+  const switching = G.weaponSwitchCd > 0;
+  const colors = ['#ffcc00', '#ff8800', '#ff4400', '#ff0000', '#aa0000', '#550000'];
+  const color = colors[Math.min(lv - 1, colors.length - 1)];
+  ctx.fillStyle = switching ? '#2a2a00' : color + '33';
+  ctx.strokeStyle = switching ? '#ffff00' : color;
+  ctx.lineWidth = 2 + (lv > 1 ? 1 : 0);
+  ctx.beginPath(); ctx.roundRect(x-18, y-18, 36, 36, 6); ctx.fill(); ctx.stroke();
 
-    // Icon
-    ctx.font = '22px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(def.icon, x, y+8);
+  // Icon
+  ctx.font = '22px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(def.icon, x, y+8);
 
-    // Level
-    ctx.font = 'bold 9px sans-serif'; ctx.fillStyle = '#ffdd00';
-    ctx.fillText(`Lv${w.lv}`, x, y-8);
+  // Level with size based on level
+  ctx.font = `bold ${9 + (lv-1)*2}px sans-serif`; ctx.fillStyle = color;
+  ctx.fillText(`Lv${lv}`, x, y-8);
 
-    if (switching) {
-      ctx.font = '8px sans-serif'; ctx.fillStyle = '#ffff00';
-      ctx.fillText('切换中', x, y+26);
-    }
+  if (switching) {
+    ctx.font = '8px sans-serif'; ctx.fillStyle = '#ffff00';
+    ctx.fillText('切换中', x, y+26);
   }
+}
+
+function drawWeaponPanel(){
+  const y=WEAPON_DISPLAY_Y, h=40, by=y-h/2;
+  // Background
+  ctx.fillStyle='rgba(10,31,53,0.95)';
+  ctx.fillRect(0,by,CW,h);
+  ctx.strokeStyle='#4a9aaa';
+  ctx.lineWidth=2;
+  ctx.strokeRect(0,by,CW,h);
+  
+  // Weapon info
+  const ti=G.curWeapon, def=WEAPON_DEFS[ti], lv=G.weaponLevels[ti];
+  const colors=['#ffcc00','#ff8800','#ff4400','#ff0000','#aa0000','#550000'];
+  const c=colors[Math.min(lv-1,colors.length-1)];
+  
+  // Icon box
+  const wx=50, wy=by+h/2;
+  ctx.fillStyle=c;
+  ctx.globalAlpha=0.15;
+  ctx.fillRect(wx-22,wy-18,44,36);
+  ctx.globalAlpha=1;
+  ctx.strokeStyle=c;
+  ctx.lineWidth=2;
+  ctx.strokeRect(wx-22,wy-18,44,36);
+  
+  // Icon
+  ctx.font='bold 28px sans-serif';
+  ctx.textAlign='center';
+  ctx.fillStyle='#fff';
+  ctx.fillText(def.icon,wx,wy+6);
+  
+  // Name and level
+  ctx.font='bold 14px sans-serif';
+  ctx.fillStyle=c;
+  ctx.textAlign='left';
+  ctx.fillText(def.name+' Lv'+lv,wx+35,by+14);
+  
+  // Stats
+  ctx.font='11px sans-serif';
+  ctx.fillStyle='#aaa';
+  ctx.fillText('伤害:'+def.dmg+'|射程:'+def.range,wx+35,by+28);
+  
+  // Upgrade button
+  const cost=10+lv*5, ok=G.gold>=cost;
+  ctx.fillStyle=ok?'#4f4':'#f44';
+  ctx.font='bold 11px sans-serif';
+  ctx.textAlign='right';
+  ctx.fillText('升级'+cost+'g',CW-12,wy);
 }
 
 function drawSupport() {
@@ -1049,12 +1215,12 @@ function updateBuffsDisplay() {
 }
 
 function updateWeaponUI() {
-  for (let i = 0; i < 4; i++) {
-    const def = WEAPON_DEFS[G.weapons[i].ti];
-    const el  = document.getElementById(`wslot${i}`);
-    el.innerHTML = `槽${i}<br>${def.icon}${def.name}`;
-    el.className = 'weapon-slot-btn' + (G.weapons[i].switchCd > 0 ? ' switching' : '');
-  }
+  const ti = G.curWeapon;
+  const def = WEAPON_DEFS[ti];
+  const lv = G.weaponLevels[ti];
+  const el = document.getElementById('mainWeapon');
+  el.innerHTML = `${def.icon}${def.name}<br><span id="weaponLvDisplay">Lv${lv}</span>`;
+  el.className = 'weapon-slot-btn' + (G.weaponSwitchCd > 0 ? ' switching' : '');
 }
 
 // ============================================================
@@ -1071,6 +1237,8 @@ function startNextWave() {
   G.packBuys   = 0;
   G.packLv     = 0;
   G.gamblesLeft = 3;
+  G.weaponCd = 0;
+  G.weaponSwitchCd = 0;
 
   // Build spawn queue
   G.spawnQueue = [];
@@ -1255,15 +1423,18 @@ function doGamble(risk) {
 }
 
 // ============================================================
-// WEAPON CYCLING
+// WEAPON CYCLING & UPGRADE
 // ============================================================
-function cycleWeapon(i) {
-  const w = G.weapons[i];
-  if (w.switchCd > 0) { flash('武器冷却中...'); return; }
-  w.ti = (w.ti + 1) % WEAPON_DEFS.length;
-  w.switchCd = 3000;
-  w.cd = 0;
-  flash(`槽${i} → ${WEAPON_DEFS[w.ti].icon}${WEAPON_DEFS[w.ti].name}`);
+function upgradeWeapon() {
+  const ti = G.curWeapon;
+  const def = WEAPON_DEFS[ti];
+  const cost = 10 + G.weaponLevels[ti] * 5;
+  if (G.gold < cost) { flash(`需要 ${cost}g (现有 ${G.gold}g)`); return; }
+  G.gold -= cost;
+  G.weaponLevels[ti]++;
+  const lv = G.weaponLevels[ti];
+  flash(`${def.icon}${def.name} 升级到 Lv${lv}! 伤害更强！`);
+  updateHUD();
   updateWeaponUI();
 }
 
@@ -1292,6 +1463,16 @@ function flash(msg) {
 // ============================================================
 // MISC INPUT
 // ============================================================
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (CW / rect.width);
+  const y = (e.clientY - rect.top) * (CH / rect.height);
+  const wpY = WEAPON_DISPLAY_Y, wpH = 17;
+  if (x >= 22 && x <= 78 && y >= wpY - wpH && y <= wpY + wpH) {
+    openWeaponSelector();
+  }
+});
+
 document.addEventListener('click', () => {
   if (G.selCard >= 0) { G.selCard = -1; renderCards(); }
 });
