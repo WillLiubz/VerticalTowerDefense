@@ -15,6 +15,8 @@ body {
   font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
   color: #fff;
   overflow-x: hidden;
+  margin: 0;
+  padding: 0;
 }
 #gameWrapper {
   width: 480px;
@@ -44,12 +46,15 @@ body {
   display: block;
   background: #0d1b2a;
   flex-shrink: 0;
+  margin: 0;
+  padding: 0;
 }
 #bottomUI {
   background: #131928;
   padding: 6px 8px;
   border-top: 2px solid #1e3a5f;
   flex-shrink: 0;
+  margin: 0;
 }
 #buffsDisplay {
   display: flex;
@@ -246,7 +251,7 @@ body {
   </div>
 
   <!-- Battle Canvas -->
-  <canvas id="gameCanvas" width="480" height="520"></canvas>
+  <canvas id="gameCanvas" width="480" height="450"></canvas>
 
   <!-- Bottom UI -->
   <div id="bottomUI">
@@ -412,17 +417,16 @@ function switchToWeapon(weaponIndex) {
   updateWeaponUI();
 }
 // ============================================================
-const CW = 480, CH = 520;
+const CW = 480, CH = 450;
 const FIELD_L = 60, FIELD_R = 420;
 const SPAWN_Y  = 30;
-const WEAPON_Y = 400;
+const WEAPON_Y = 340;
 const DEFENSE_Y = 430;
-const WEAPON_DISPLAY_Y = 360;  // 武器显示行的 Y 坐标（战场中部）
 
 const SUPPORT_ROWS_Y = [120, 220]; // two rows
 
 const WEAPON_DEFS = [
-  { name:'机枪', icon:'🔫', dmg:8,   rate:150,  range:450, type:'mg',     lvMul:[1,1.3,1.7,2.2,2.8,3.5] },
+  { name:'机枪', icon:'🔫', dmg:10,  rate:120,  range:450, type:'mg',     lvMul:[1,1.3,1.7,2.2,2.8,3.5] },
   { name:'狙击', icon:'🎯', dmg:50,  rate:1200, range:500, type:'sniper', pierce:true, lvMul:[1,1.2,1.5,1.9,2.4,3.0] },
   { name:'激光', icon:'⚡', dmg:3,   rate:40,   range:400, type:'laser',  lvMul:[1,1.4,1.9,2.5,3.2,4.0] },
   { name:'火箭', icon:'🚀', dmg:30,  rate:800,  range:450, type:'rocket', aoe:true, aoeR:60, lvMul:[1,1.25,1.6,2.0,2.5,3.1] },
@@ -480,6 +484,13 @@ const G = {
   gold: 50, hp: 20, wave: 0, maxWave: 10,
   gameTime: 180,   // seconds
   running: false, over: false,
+  defenseHp: 100, maxDefenseHp: 100,  // 防线血条
+
+  level: 0,  // 当前关卡 (0=未开始)
+  levelDifficulty: 1.0,  // 关卡难度系数
+  levelStarted: false,  // 是否已开始本关卡
+  levelCompleted: false,  // 本关卡是否完成
+  countdownMs: 0,  // 下一波倒计时
 
   enemies: [], bullets: [], particles: [],
 
@@ -561,9 +572,79 @@ function init() {
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) * (CW / rect.width);
     const y = (e.clientY - rect.top) * (CH / rect.height);
-    const wpY = WEAPON_DISPLAY_Y, wpH = 17;
-    if (x >= 22 && x <= 78 && y >= wpY - wpH && y <= wpY + wpH) {
-      openWeaponSelector();
+    
+    // 关卡选择界面
+    if (!G.levelStarted && !G.running) {
+      const levels = [
+        {lv:1, diff:1.0},
+        {lv:2, diff:1.3},
+        {lv:3, diff:1.7},
+        {lv:4, diff:2.2}
+      ];
+      const btnY = [150, 200, 250, 300];
+      for (let i = 0; i < 4; i++) {
+        const y_btn = btnY[i];
+        if (x >= CW/2 - 80 && x <= CW/2 + 80 && y >= y_btn - 15 && y <= y_btn + 15) {
+          // 选择关卡
+          G.level = levels[i].lv;
+          G.levelDifficulty = levels[i].diff;
+          G.levelStarted = true;
+          G.wave = 0;
+          G.maxWave = 10;
+          G.gold = 50;
+          G.hp = 20;
+          G.defenseHp = G.maxDefenseHp;  // 重置防线血条
+          startNextWave();
+          return;
+        }
+      }
+    }
+    
+    // 关卡完成选择界面
+    else if (G.levelCompleted && !G.running) {
+      // 下一关卡按钮 CW/2 - 70, 230, 140, 35
+      if (x >= CW/2 - 70 && x <= CW/2 + 70 && y >= 230 && y <= 265) {
+        // 继续下一关卡
+        G.level++;
+        G.levelDifficulty *= 1.15;  // 提升15%难度
+        G.levelCompleted = false;
+        G.levelStarted = true;
+        G.wave = 0;
+        G.maxWave = 10;
+        G.gameTime = 180;
+        G.defenseHp = G.maxDefenseHp;  // 重置防线血条
+        startNextWave();
+        return;
+      }
+      // 离开游戏按钮 CW/2 - 70, 280, 140, 35
+      else if (x >= CW/2 - 70 && x <= CW/2 + 70 && y >= 280 && y <= 315) {
+        // 返回开局选择
+        G.levelStarted = false;
+        G.levelCompleted = false;
+        G.level = 0;
+        G.wave = 0;
+        G.running = false;
+        G.gold = 50;
+        G.hp = 20;
+      }
+    }
+    
+    // 游戏进行中 - 点击武器切换或升级
+    else if (G.running) {
+      const wpX = weaponX(), wpY = WEAPON_Y;
+      // Click on weapon icon to open selector
+      if (x >= wpX-18 && x <= wpX+18 && y >= wpY-18 && y <= wpY+18) {
+        openWeaponSelector();
+        return;
+      }
+      
+      // Click on upgrade button
+      const btnX = wpX + 85, btnY = wpY - 15;
+      const btnW = 50, btnH = 22;
+      if (x >= btnX && x <= btnX + btnW && y >= btnY && y <= btnY + btnH) {
+        upgradeWeapon();
+        return;
+      }
     }
   });
   
@@ -599,6 +680,15 @@ function update(dt) {
   if (G.freezeMs > 0) G.freezeMs -= dt;
   if (G.slowMs   > 0) { G.slowMs -= dt; if (G.slowMs <= 0) { G.slowMs = 0; G.slowAmt = 0; } }
   if (G.msgTimer > 0) G.msgTimer -= dt;
+
+  // Countdown for next wave
+  if (G.countdownMs > 0) {
+    G.countdownMs -= dt;
+    if (G.countdownMs <= 0) {
+      G.countdownMs = 0;
+      startNextWave();
+    }
+  }
 
   // Spawn
   if (G.waveActive && G.spawnQueue.length > 0) {
@@ -664,9 +754,10 @@ function updateEnemies(dt) {
 
     // Hit defense line
     if (e.y >= DEFENSE_Y) {
-      G.hp--;
+      G.defenseHp -= e.def.dmg || 10;  // 防线扣血
       burst(e.x, DEFENSE_Y, '#ff4444', 4);
       G.enemies.splice(i, 1);
+      if (G.defenseHp <= 0) { G.hp--; G.defenseHp = G.maxDefenseHp; }
       if (G.hp <= 0) { triggerGameOver(false); return; }
       updateHUD();
     }
@@ -713,7 +804,7 @@ function updateWeapons(dt) {
   } else if (def.type === 'sniper') {
     fireBullet(wx, wy, tgt, dmg, {btype:'sniper', spd:12, pierce:true});
   } else {
-    fireBullet(wx, wy, tgt, dmg, {btype:'bullet', spd:7});
+    fireBullet(wx, wy, tgt, dmg, {btype:'mg', spd:11});
   }
 }
 
@@ -743,7 +834,7 @@ function updateBullets(dt) {
       G.bullets.splice(i, 1); continue;
     }
 
-    const r = b.btype === 'rocket' ? 6 : 4;
+    const r = b.btype === 'rocket' ? 6 : (b.btype === 'mg' ? 10 : 6);
     let hit = false;
     for (let j = G.enemies.length - 1; j >= 0; j--) {
       const e = G.enemies[j];
@@ -902,14 +993,105 @@ function render() {
     drawWeaponPanel();
     drawHUDCanvas();
 
-    if (!G.running && G.wave === 0) {
-      ctx.font = 'bold 18px sans-serif';
-      ctx.fillStyle = '#88ffaa';
+    // 未开始游戏 - 显示关卡选择
+    if (!G.levelStarted && !G.running) {
+      // 黑色半透明覆盖
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(0, 0, CW, CH);
+      
+      // 标题
+      ctx.font = 'bold 28px sans-serif';
+      ctx.fillStyle = '#ffeb3b';
       ctx.textAlign = 'center';
-      ctx.fillText('点击 "▶ 第1波" 开始游戏', CW/2, CH/2 - 10);
-      ctx.font = '12px sans-serif';
-      ctx.fillStyle = '#556';
-      ctx.fillText('部署支援 · 购买卡包 · 组合强化', CW/2, CH/2 + 14);
+      ctx.fillText('塔防游戏', CW/2, 80);
+      
+      // 难度选按钮
+      const levels = [
+        {lv:1, diff:1.0, color:'#66ff66', text:'简单'},
+        {lv:2, diff:1.3, color:'#ffff66', text:'普通'},
+        {lv:3, diff:1.7, color:'#ff9966', text:'困难'},
+        {lv:4, diff:2.2, color:'#ff6666', text:'地狱'}
+      ];
+      
+      const btnY = [150, 200, 250, 300];
+      for (let i = 0; i < 4; i++) {
+        const l = levels[i];
+        const y = btnY[i];
+        // 按钮背景
+        ctx.fillStyle = l.color + '22';
+        ctx.strokeStyle = l.color;
+        ctx.lineWidth = 2;
+        ctx.fillRect(CW/2 - 80, y - 15, 160, 30);
+        ctx.strokeRect(CW/2 - 80, y - 15, 160, 30);
+        // 文字
+        ctx.font = 'bold 14px sans-serif';
+        ctx.fillStyle = l.color;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`关卡 ${l.lv}: ${l.text}`, CW/2, y);
+      }
+      
+      ctx.font = '11px sans-serif';
+      ctx.fillStyle = '#888';
+      ctx.fillText('点击选择难度开始游戏', CW/2, 360);
+    }
+    
+    // 波之间倒计时
+    else if (G.countdownMs > 0 && !G.levelCompleted) {
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(0, 0, CW, CH);
+      
+      const secs = Math.ceil(G.countdownMs / 1000);
+      ctx.font = 'bold 48px sans-serif';
+      ctx.fillStyle = '#ffff66';
+      ctx.textAlign = 'center';
+      ctx.fillText(secs, CW/2, CH/2 + 50);
+      
+      ctx.font = '18px sans-serif';
+      ctx.fillStyle = '#aaccff';
+      ctx.fillText('下一波即将开始', CW/2, CH/2 - 20);
+    }
+    
+    // 关卡完成 - 选择继续或结束
+    else if (G.levelCompleted && !G.running) {
+      ctx.fillStyle = 'rgba(0,0,0,0.8)';
+      ctx.fillRect(0, 0, CW, CH);
+      
+      ctx.font = 'bold 28px sans-serif';
+      ctx.fillStyle = '#66ff66';
+      ctx.textAlign = 'center';
+      ctx.fillText('关卡完成！', CW/2, 80);
+      
+      ctx.font = '16px sans-serif';
+      ctx.fillStyle = '#aaffaa';
+      ctx.fillText(`关卡 ${G.level} 难度 ${G.levelDifficulty.toFixed(1)}`, CW/2, 120);
+      
+      ctx.font = '14px sans-serif';
+      ctx.fillStyle = '#ffff88';
+      const goldEarned = Math.floor(G.gold);
+      ctx.fillText(`获得金币: ${goldEarned}`, CW/2, 180);
+      
+      // 继续按钮
+      ctx.fillStyle = '#ff9933aa';
+      ctx.strokeStyle = '#ffff66';
+      ctx.lineWidth = 2;
+      ctx.fillRect(CW/2 - 70, 230, 140, 35);
+      ctx.strokeRect(CW/2 - 70, 230, 140, 35);
+      ctx.font = 'bold 16px sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('下一关卡 →', CW/2, 247);
+      
+      // 退出按钮
+      ctx.fillStyle = '#6666ff88';
+      ctx.strokeStyle = '#8888ff';
+      ctx.fillRect(CW/2 - 70, 280, 140, 35);
+      ctx.strokeRect(CW/2 - 70, 280, 140, 35);
+      ctx.fillStyle = '#aabbff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('离开游戏', CW/2, 297);
     }
   } catch (e) {
     console.error('[Render Error]', e.message, e.stack);
@@ -947,22 +1129,40 @@ function drawField() {
     ctx.stroke(); ctx.setLineDash([]);
   }
 
-  // Weapon platform line
-  ctx.strokeStyle = 'rgba(255,200,60,0.25)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(FIELD_L-10, WEAPON_Y-22);
-  ctx.lineTo(FIELD_R+10, WEAPON_Y-22);
-  ctx.stroke();
-
-  // Defense line
+  // Defense line - 血条显示 (居中)
+  const defenseW = CW * 0.75;
+  const defenseX = (CW - defenseW) / 2;
+  const defenseBarH = 6;
+  const defenseY = DEFENSE_Y - 3;
+  
+  // 背景框 (高度从30改为16，竖直方向宽度变小)
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.fillRect(defenseX - 5, defenseY - 5, defenseW + 10, 16);
   ctx.strokeStyle = '#ff4444';
-  ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.moveTo(0, DEFENSE_Y); ctx.lineTo(CW, DEFENSE_Y); ctx.stroke();
+  ctx.lineWidth = 2;
+  ctx.strokeRect(defenseX - 5, defenseY - 5, defenseW + 10, 16);
+  
+  // 血条背景
+  ctx.fillStyle = '#330000';
+  ctx.fillRect(defenseX, defenseY, defenseW, defenseBarH);
+  
+  // 血条
+  const defensePercent = Math.max(0, G.defenseHp / G.maxDefenseHp);
+  const hpColor = defensePercent > 0.5 ? '#00ff00' : (defensePercent > 0.2 ? '#ffff00' : '#ff0000');
+  ctx.fillStyle = hpColor;
+  ctx.fillRect(defenseX, defenseY, defenseW * defensePercent, defenseBarH);
+  
+  // 血条边框
+  ctx.strokeStyle = hpColor;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(defenseX, defenseY, defenseW, defenseBarH);
+  
+  // 文字标签
   ctx.font = 'bold 10px sans-serif';
-  ctx.fillStyle = '#ff6666';
-  ctx.textAlign = 'right';
-  ctx.fillText('— 防 线 —', CW-4, DEFENSE_Y - 4);
+  ctx.fillStyle = '#ffcccc';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`防 线 ${Math.ceil(G.defenseHp)}/${G.maxDefenseHp}`, defenseX + defenseW/2, defenseY - 8);
 }
 
 function drawEnemies() {
@@ -1100,52 +1300,68 @@ function drawWeapons() {
 }
 
 function drawWeaponPanel(){
-  const y=WEAPON_DISPLAY_Y, h=40, by=y-h/2;
-  // Background
-  ctx.fillStyle='rgba(10,31,53,0.95)';
-  ctx.fillRect(0,by,CW,h);
-  ctx.strokeStyle='#4a9aaa';
-  ctx.lineWidth=2;
-  ctx.strokeRect(0,by,CW,h);
-  
-  // Weapon info
   const ti=G.curWeapon, def=WEAPON_DEFS[ti], lv=G.weaponLevels[ti];
+  const x=weaponX(), y=WEAPON_Y;
   const colors=['#ffcc00','#ff8800','#ff4400','#ff0000','#aa0000','#550000'];
   const c=colors[Math.min(lv-1,colors.length-1)];
   
-  // Icon box
-  const wx=50, wy=by+h/2;
-  ctx.fillStyle=c;
-  ctx.globalAlpha=0.15;
-  ctx.fillRect(wx-22,wy-18,44,36);
-  ctx.globalAlpha=1;
-  ctx.strokeStyle=c;
-  ctx.lineWidth=2;
-  ctx.strokeRect(wx-22,wy-18,44,36);
+  // 整体武器区域背景框
+  const weaponPanelX = x - 25;
+  const weaponPanelY = y - 20;
+  const weaponPanelW = 200;
+  const weaponPanelH = 50;
   
-  // Icon
-  ctx.font='bold 28px sans-serif';
-  ctx.textAlign='center';
-  ctx.fillStyle='#fff';
-  ctx.fillText(def.icon,wx,wy+6);
+  // 背景框
+  ctx.fillStyle = 'rgba(30, 30, 40, 0.4)';
+  ctx.strokeStyle = 'rgba(200, 150, 100, 0.5)';
+  ctx.lineWidth = 1;
+  ctx.fillRect(weaponPanelX, weaponPanelY, weaponPanelW, weaponPanelH);
+  ctx.strokeRect(weaponPanelX, weaponPanelY, weaponPanelW, weaponPanelH);
+  
+  // 绘制武器图标
+  ctx.font = '32px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(def.icon, x, y);
+  
+  // Info panel to the right of weapon icon (对齐于icon中心)
+  const px=x+25, py=y-2;
   
   // Name and level
-  ctx.font='bold 14px sans-serif';
+  ctx.font='bold 12px sans-serif';
   ctx.fillStyle=c;
   ctx.textAlign='left';
-  ctx.fillText(def.name+' Lv'+lv,wx+35,by+14);
+  ctx.fillText(def.name+' Lv'+lv, px, py-12);
   
   // Stats
-  ctx.font='11px sans-serif';
+  ctx.font='10px sans-serif';
   ctx.fillStyle='#aaa';
-  ctx.fillText('伤害:'+def.dmg+'|射程:'+def.range,wx+35,by+28);
+  ctx.fillText('伤害:'+def.dmg+'|射程:'+def.range, px, py-2);
   
   // Upgrade button
   const cost=10+lv*5, ok=G.gold>=cost;
-  ctx.fillStyle=ok?'#4f4':'#f44';
+  const btnX=px+65, btnY=py-10;
+  const btnW=50, btnH=22;
+  
+  // Button background
+  ctx.fillStyle = ok ? 'rgba(76,255,100,0.3)' : 'rgba(255,100,100,0.3)';
+  ctx.strokeStyle = ok ? '#4f4' : '#f44';
+  ctx.lineWidth = 2;
+  ctx.fillRect(btnX, btnY, btnW, btnH);
+  ctx.strokeRect(btnX, btnY, btnW, btnH);
+  
+  // Button text
   ctx.font='bold 11px sans-serif';
-  ctx.textAlign='right';
-  ctx.fillText('升级'+cost+'g',CW-12,wy);
+  ctx.fillStyle = ok ? '#4f4' : '#f44';
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  ctx.fillText('升级', btnX + btnW/2, btnY + btnH/2);
+  
+  // Cost display below button
+  ctx.font='9px sans-serif';
+  ctx.fillStyle=ok?'#aaffaa':'#ffaaaa';
+  ctx.textAlign='center';
+  ctx.textBaseline='top';
+  ctx.fillText(cost+'g', btnX + btnW/2, btnY + btnH + 2);
 }
 
 function drawSupport() {
@@ -1155,22 +1371,41 @@ function drawSupport() {
 
     if (s) {
       const def = SUPPORT_DEFS[s.ti];
-      ctx.fillStyle = '#0d2a10'; ctx.strokeStyle = '#2a7a2a'; ctx.lineWidth = 2;
+      // Gradient background for deployed support
+      const grad = ctx.createLinearGradient(pos.x-18, pos.y-18, pos.x+18, pos.y+18);
+      grad.addColorStop(0, '#1d4a20');
+      grad.addColorStop(1, '#0d2a10');
+      ctx.fillStyle = grad;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#4aff4a';
       ctx.beginPath(); ctx.roundRect(pos.x-18, pos.y-18, 36, 36, 6); ctx.fill(); ctx.stroke();
-      ctx.font = '18px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText(def.icon, pos.x, pos.y+6);
-      ctx.font = 'bold 9px sans-serif'; ctx.fillStyle = '#aaffaa';
-      ctx.fillText(s.shots, pos.x, pos.y-8);
+      // Glow effect
+      ctx.strokeStyle = 'rgba(74,255,74,0.2)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.roundRect(pos.x-22, pos.y-22, 44, 44, 8); ctx.stroke();
+      // Icon
+      ctx.font = '22px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
+      ctx.fillText(def.icon, pos.x, pos.y+7);
+      // Shots remaining
+      ctx.font = 'bold 10px sans-serif'; ctx.fillStyle = '#ffff88';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(s.shots, pos.x, pos.y-10);
       // Arrow showing fire direction
-      ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(150,255,150,0.35)';
-      ctx.fillText(pos.left ? '→' : '←', pos.x + (pos.left ? 26 : -26), pos.y+4);
+      ctx.font = '14px sans-serif'; ctx.fillStyle = 'rgba(200,255,200,0.6)';
+      ctx.fillText(pos.left ? '→' : '←', pos.x + (pos.left ? 28 : -28), pos.y+5);
     } else {
-      ctx.strokeStyle = 'rgba(60,120,60,0.3)'; ctx.lineWidth = 1;
-      ctx.setLineDash([3,3]);
+      // Empty slot with more visible border
+      ctx.strokeStyle = 'rgba(100,180,100,0.5)'; 
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4,4]);
       ctx.beginPath(); ctx.roundRect(pos.x-18, pos.y-18, 36, 36, 6); ctx.stroke();
       ctx.setLineDash([]);
-      ctx.font = '9px sans-serif'; ctx.fillStyle = 'rgba(60,120,60,0.4)'; ctx.textAlign = 'center';
-      ctx.fillText(i<2 ? 'L'+(i) : 'R'+(i-2), pos.x, pos.y+3);
+      // Text label
+      ctx.font = 'bold 11px sans-serif'; 
+      ctx.fillStyle = 'rgba(120,200,120,0.7)'; 
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(i<2 ? '◀L'+ i : 'R' + (i-2) +'▶', pos.x, pos.y+4);
     }
   }
 }
@@ -1253,10 +1488,16 @@ function updateWeaponUI() {
 // WAVES
 // ============================================================
 function startNextWave() {
-  if (G.waveActive || G.wave >= G.maxWave || G.over) return;
+  // 如果还没开始本关卡，先初始化关卡
+  if (!G.levelStarted) {
+    return;  // 由点击处理器调用会设置关卡
+  }
+  
+  if (G.waveActive || G.wave >= G.maxWave || G.over || G.levelCompleted) return;
   G.wave++;
   G.waveActive = true;
   G.running    = true;
+  G.countdownMs = 0;  // 清除倒计时
 
   // Reset per-wave
   G.packPrice  = 5;
@@ -1266,10 +1507,11 @@ function startNextWave() {
   G.weaponCd = 0;
   G.weaponSwitchCd = 0;
 
-  // Build spawn queue
+  // Build spawn queue with difficulty scaling
   G.spawnQueue = [];
   for (const grp of WAVES[G.wave-1]) {
-    for (let i = 0; i < grp.n; i++)
+    const scaledN = Math.ceil(grp.n * G.levelDifficulty);
+    for (let i = 0; i < scaledN; i++)
       G.spawnQueue.push({type: grp.t, wave: G.wave});
   }
   // Shuffle
@@ -1283,9 +1525,15 @@ function startNextWave() {
 function waveComplete() {
   G.waveActive = false;
   if (G.wave >= G.maxWave) {
-    triggerGameOver(true); return;
+    // 关卡完成
+    G.levelCompleted = true;
+    G.running = false;
+    flash(`🎉 关卡 ${G.level} 完成！`);
+  } else {
+    // 开始倒计时进入下一波（3秒）
+    G.countdownMs = 3000;
+    flash(`✅ 第 ${G.wave} 波完成！准备下一波`);
   }
-  flash(`✅ 第 ${G.wave} 波完成！准备下一波`);
   updateHUD();
 }
 
