@@ -506,8 +506,20 @@ const G = {
 // ============================================================
 // CANVAS
 // ============================================================
-const canvas = document.getElementById('gameCanvas');
-const ctx    = canvas.getContext('2d');
+let canvas, ctx;
+
+function initCanvas() {
+  console.log('[initCanvas] Looking for gameCanvas...');
+  canvas = document.getElementById('gameCanvas');
+  console.log('[initCanvas] canvas=', canvas);
+  if (!canvas) {
+    console.error('[initCanvas] Canvas not found!');
+    return false;
+  }
+  ctx = canvas.getContext('2d');
+  console.log('[initCanvas] ctx=', ctx);
+  return true;
+}
 
 // ============================================================
 // HELPERS
@@ -530,10 +542,31 @@ function supportPos(i) {
 // ============================================================
 function init() {
   console.log('[init] Starting initialization...');
+  
+  // Initialize canvas first
+  if (!initCanvas()) {
+    console.error('[init] Failed to initialize canvas!');
+    return;
+  }
+  
+  console.log('[init] Canvas initialized. CW=' + CW + ', CH=' + CH);
   updateHUD();
   updateWeaponUI();
   updateBuffsDisplay();
   updateGamblingBtn();
+  
+  // Setup event listeners now that canvas is initialized
+  console.log('[init] Setting up event listeners...');
+  canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (CW / rect.width);
+    const y = (e.clientY - rect.top) * (CH / rect.height);
+    const wpY = WEAPON_DISPLAY_Y, wpH = 17;
+    if (x >= 22 && x <= 78 && y >= wpY - wpH && y <= wpY + wpH) {
+      openWeaponSelector();
+    }
+  });
+  
   console.log('[init] Requesting animation frame...');
   requestAnimationFrame(gameLoop);
   console.log('[init] Done!');
@@ -860,22 +893,14 @@ function render() {
     ctx.fillStyle = grad;
     ctx.fillRect(0,0,CW,CH);
 
-    // Draw simple test rectangle
-    ctx.fillStyle = '#ff0000';
-    ctx.fillRect(10, 10, 50, 50);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 16px sans-serif';
-    ctx.fillText('TEST', 20, 35);
-
-    // Only draw field for now
-    try {
-      console.log('[render] calling drawField');
-      drawField();
-      console.log('[render] drawField done');
-    } catch(e) {
-      console.error('[drawField error]', e.message);
-      ctx.fillText('Field Error: ' + e.message, 70, 30);
-    }
+    drawField();
+    drawParticles();
+    drawBullets();
+    drawSupport();
+    drawEnemies();
+    drawWeapons();
+    drawWeaponPanel();
+    drawHUDCanvas();
 
     if (!G.running && G.wave === 0) {
       ctx.font = 'bold 18px sans-serif';
@@ -895,7 +920,6 @@ function render() {
 }
 
 function drawField() {
-  console.log('[drawField] called');
   // Field boundary
   ctx.strokeStyle = 'rgba(255,255,255,0.05)';
   ctx.lineWidth = 1;
@@ -1215,12 +1239,14 @@ function updateBuffsDisplay() {
 }
 
 function updateWeaponUI() {
-  const ti = G.curWeapon;
-  const def = WEAPON_DEFS[ti];
-  const lv = G.weaponLevels[ti];
   const el = document.getElementById('mainWeapon');
-  el.innerHTML = `${def.icon}${def.name}<br><span id="weaponLvDisplay">Lv${lv}</span>`;
-  el.className = 'weapon-slot-btn' + (G.weaponSwitchCd > 0 ? ' switching' : '');
+  if (el) {
+    const ti = G.curWeapon;
+    const def = WEAPON_DEFS[ti];
+    const lv = G.weaponLevels[ti];
+    el.innerHTML = `${def.icon}${def.name}<br><span id="weaponLvDisplay">Lv${lv}</span>`;
+    el.className = 'weapon-slot-btn' + (G.weaponSwitchCd > 0 ? ' switching' : '');
+  }
 }
 
 // ============================================================
@@ -1463,16 +1489,6 @@ function flash(msg) {
 // ============================================================
 // MISC INPUT
 // ============================================================
-canvas.addEventListener('click', (e) => {
-  const rect = canvas.getBoundingClientRect();
-  const x = (e.clientX - rect.left) * (CW / rect.width);
-  const y = (e.clientY - rect.top) * (CH / rect.height);
-  const wpY = WEAPON_DISPLAY_Y, wpH = 17;
-  if (x >= 22 && x <= 78 && y >= wpY - wpH && y <= wpY + wpH) {
-    openWeaponSelector();
-  }
-});
-
 document.addEventListener('click', () => {
   if (G.selCard >= 0) { G.selCard = -1; renderCards(); }
 });
