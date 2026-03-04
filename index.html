@@ -164,26 +164,8 @@ body {
   transition: border-color 0.12s, color 0.12s;
 }
 .support-buy-btn:hover { border-color: #4a8;  color: #afa; }
-#weaponRow {
-  display: flex;
-  gap: 4px;
-}
-.weapon-slot-btn {
-  flex: 1;
-  background: #0d1b2a;
-  border: 1px solid #1e3a5f;
-  border-radius: 6px;
-  padding: 3px;
-  cursor: pointer;
-  font-size: 10px;
-  text-align: center;
-  color: #889;
-  font-family: inherit;
-  transition: border-color 0.12s;
-  line-height: 1.4;
-}
-.weapon-slot-btn:hover { border-color: #4af; color: #cef; }
-.weapon-slot-btn.switching { border-color: #ff8; color: #ff8; }
+/* weaponRow styles removed; UI now draws weapon icon directly on canvas
+   (weapon-row HTML is no longer present). */
 /* Modals */
 #overlay {
   display: none;
@@ -420,8 +402,11 @@ function switchToWeapon(weaponIndex) {
 const CW = 480, CH = 450;
 const FIELD_L = 60, FIELD_R = 420;
 const SPAWN_Y  = 30;
-const WEAPON_Y = 340;
 const DEFENSE_Y = 430;
+// weapon area should sit high enough that the platform and upgrade button
+// both stay well above the defense line (including a safety margin).
+// button bottom sits at y+33, so we require y <= DEFENSE_Y - 43.
+const WEAPON_Y = DEFENSE_Y - 50;
 
 const SUPPORT_ROWS_Y = [120, 220]; // two rows
 
@@ -562,7 +547,7 @@ function init() {
   
   console.log('[init] Canvas initialized. CW=' + CW + ', CH=' + CH);
   updateHUD();
-  updateWeaponUI();
+  // weapon UI is rendered on canvas; no DOM element to update
   updateBuffsDisplay();
   updateGamblingBtn();
   
@@ -637,11 +622,10 @@ function init() {
         openWeaponSelector();
         return;
       }
-      
-      // Click on upgrade button
-      const btnX = wpX + 85, btnY = wpY - 15;
-      const btnW = 50, btnH = 22;
-      if (x >= btnX && x <= btnX + btnW && y >= btnY && y <= btnY + btnH) {
+      // upgrade button region to right of weapon icon
+      const upW = 50, upH = 22;
+      const upX = wpX + 28 + upW/2, upY = wpY;
+      if (x >= upX - upW/2 && x <= upX + upW/2 && y >= upY - upH/2 && y <= upY + upH/2) {
         upgradeWeapon();
         return;
       }
@@ -990,7 +974,7 @@ function render() {
     drawSupport();
     drawEnemies();
     drawWeapons();
-    drawWeaponPanel();
+    // weapon information panel has been removed - icon + level drawn in drawWeapons
     drawHUDCanvas();
 
     // 未开始游戏 - 显示关卡选择
@@ -1286,83 +1270,47 @@ function drawWeapons() {
   ctx.beginPath(); ctx.roundRect(x-18, y-18, 36, 36, 6); ctx.fill(); ctx.stroke();
 
   // Icon
-  ctx.font = '22px sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText(def.icon, x, y+8);
+  ctx.font = '26px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fff';
+  ctx.fillText(def.icon, x, y);
 
-  // Level with size based on level
-  ctx.font = `bold ${9 + (lv-1)*2}px sans-serif`; ctx.fillStyle = color;
-  ctx.fillText(`Lv${lv}`, x, y-8);
+  // Level badge (small circle top-right)
+  ctx.beginPath(); ctx.arc(x+14, y-14, 10, 0, Math.PI*2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.font = 'bold 10px sans-serif';
+  ctx.fillStyle = '#000';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(lv, x+14, y-14);
 
+  // Optional switching text
   if (switching) {
     ctx.font = '8px sans-serif'; ctx.fillStyle = '#ffff00';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('切换中', x, y+26);
   }
-}
 
-function drawWeaponPanel(){
-  const ti=G.curWeapon, def=WEAPON_DEFS[ti], lv=G.weaponLevels[ti];
-  const x=weaponX(), y=WEAPON_Y;
-  const colors=['#ffcc00','#ff8800','#ff4400','#ff0000','#aa0000','#550000'];
-  const c=colors[Math.min(lv-1,colors.length-1)];
-  
-  // 整体武器区域背景框
-  const weaponPanelX = x - 25;
-  const weaponPanelY = y - 20;
-  const weaponPanelW = 200;
-  const weaponPanelH = 50;
-  
-  // 背景框
-  ctx.fillStyle = 'rgba(30, 30, 40, 0.4)';
-  ctx.strokeStyle = 'rgba(200, 150, 100, 0.5)';
-  ctx.lineWidth = 1;
-  ctx.fillRect(weaponPanelX, weaponPanelY, weaponPanelW, weaponPanelH);
-  ctx.strokeRect(weaponPanelX, weaponPanelY, weaponPanelW, weaponPanelH);
-  
-  // 绘制武器图标
-  ctx.font = '32px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText(def.icon, x, y);
-  
-  // Info panel to the right of weapon icon (对齐于icon中心)
-  const px=x+25, py=y-2;
-  
-  // Name and level
-  ctx.font='bold 12px sans-serif';
-  ctx.fillStyle=c;
-  ctx.textAlign='left';
-  ctx.fillText(def.name+' Lv'+lv, px, py-12);
-  
-  // Stats
-  ctx.font='10px sans-serif';
-  ctx.fillStyle='#aaa';
-  ctx.fillText('伤害:'+def.dmg+'|射程:'+def.range, px, py-2);
-  
-  // Upgrade button
-  const cost=10+lv*5, ok=G.gold>=cost;
-  const btnX=px+65, btnY=py-10;
-  const btnW=50, btnH=22;
-  
-  // Button background
-  ctx.fillStyle = ok ? 'rgba(76,255,100,0.3)' : 'rgba(255,100,100,0.3)';
-  ctx.strokeStyle = ok ? '#4f4' : '#f44';
+  // upgrade button and cost to the right of weapon icon
+  const cost = 10 + lv * 5;
+  const btnW = 50, btnH = 22;
+  const btnX = x + 28, btnY = y - btnH/2;
+  ctx.fillStyle = G.gold >= cost ? 'rgba(76,255,100,0.3)' : 'rgba(255,100,100,0.3)';
+  ctx.strokeStyle = G.gold >= cost ? '#4f4' : '#f44';
   ctx.lineWidth = 2;
   ctx.fillRect(btnX, btnY, btnW, btnH);
   ctx.strokeRect(btnX, btnY, btnW, btnH);
-  
-  // Button text
-  ctx.font='bold 11px sans-serif';
-  ctx.fillStyle = ok ? '#4f4' : '#f44';
-  ctx.textAlign='center';
-  ctx.textBaseline='middle';
+  ctx.font = 'bold 12px sans-serif';
+  ctx.fillStyle = G.gold >= cost ? '#4f4' : '#f44';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText('升级', btnX + btnW/2, btnY + btnH/2);
-  
-  // Cost display below button
-  ctx.font='9px sans-serif';
-  ctx.fillStyle=ok?'#aaffaa':'#ffaaaa';
-  ctx.textAlign='center';
-  ctx.textBaseline='top';
-  ctx.fillText(cost+'g', btnX + btnW/2, btnY + btnH + 2);
+  // cost text below button
+  ctx.font = '10px sans-serif';
+  ctx.fillStyle = '#aaa';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillText(cost + 'g', btnX + btnW/2, btnY + btnH + 2);
 }
+
+// weapon panel has been removed as part of UI simplification; details are now shown directly on the icon in drawWeapons.
 
 function drawSupport() {
   for (let i = 0; i < 4; i++) {
@@ -1473,17 +1421,7 @@ function updateBuffsDisplay() {
   el.innerHTML = tags.map(t=>`<span class="buff-tag">${t}</span>`).join('') || '';
 }
 
-function updateWeaponUI() {
-  const el = document.getElementById('mainWeapon');
-  if (el) {
-    const ti = G.curWeapon;
-    const def = WEAPON_DEFS[ti];
-    const lv = G.weaponLevels[ti];
-    el.innerHTML = `${def.icon}${def.name}<br><span id="weaponLvDisplay">Lv${lv}</span>`;
-    el.className = 'weapon-slot-btn' + (G.weaponSwitchCd > 0 ? ' switching' : '');
-  }
-}
-
+// previous DOM-based weapon UI has been removed; weapon info is now drawn directly on canvas.
 // ============================================================
 // WAVES
 // ============================================================
