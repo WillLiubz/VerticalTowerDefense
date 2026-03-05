@@ -141,6 +141,8 @@ body {
 .card.selected.lv1 { border-color: #ffff00; }
 .card.selected.lv2 { border-color: #ffff00; }
 .card.selected.lv3 { border-color: #ffff00; }
+.card.usable { animation: cardGlow 0.8s infinite; }
+@keyframes cardGlow { 0%,100% { box-shadow: 0 0 6px #44ff4488; } 50% { box-shadow: 0 0 12px #44ff44cc; } }
 .card-icon { font-size: 22px; line-height: 1.2; }
 .card-name { font-size: 9px; line-height: 1.1; color: #ccc; }
 .card-meta { font-size: 8px; color: #888; }
@@ -429,6 +431,13 @@ const CARD_DEFS = [
   { id:'speed',  name:'急速射击', icon:'⚡', type:'buff',    stat:'speed',  fx:[0.15, 0.37, 0.90] },
   { id:'range',  name:'射程扩展', icon:'🔭', type:'buff',    stat:'range',  fx:[0.25, 0.62, 1.50] },
   { id:'gold',   name:'赏金猎人', icon:'🪙', type:'buff',    stat:'gold',   fx:[0.30, 0.75, 1.80] },
+  { id:'mg_ammo',    name:'机枪弹链', icon:'🔗', type:'buff', wpn:0, stat:'damage', fx:[0.35, 0.80, 1.80], desc:'机枪专用' },
+  { id:'sniper_focus', name:'狙击聚焦', icon:'🎯', type:'buff', wpn:1, stat:'speed',  fx:[0.40, 0.90, 2.00], desc:'狙击专用' },
+  { id:'laser_burst', name:'激光脉冲',   icon:'⚡⚡', type:'buff', wpn:2, stat:'speed', fx:[0.50, 1.20, 2.50], desc:'激光专用' },
+  { id:'rocket_spread',name:'火箭扩散',  icon:'🚀🚀', type:'buff', wpn:3, stat:'range', fx:[0.45, 1.10, 2.30], desc:'火箭专用' },
+  { id:'firepower_sync', name:'火力链接', icon:'🔗🔥', type:'synergy', needs:['damage','speed'], bonus:[1.25, 1.50, 1.80], desc:'需: 火力强化+急速射击' },
+  { id:'precision_shot', name:'精准狙击', icon:'🎯⚡', type:'synergy', needs:['sniper_focus','range'], bonus:[1.30, 1.60, 2.00], desc:'需: 狙击聚焦+射程' },
+  { id:'overwhelming', name:'压倒优势', icon:'💥💥', type:'synergy', needs:['damage','gold'], bonus:[1.40, 1.75, 2.20], desc:'需: 火力强化+赏金' },
   { id:'bomb',   name:'全屏轰炸', icon:'💥', type:'instant', fx:[100, 250, 600] },
   { id:'freeze', name:'时间冻结', icon:'❄️', type:'instant', fx:[3000, 7000, 15000] },
   { id:'heal',   name:'紧急维修', icon:'💖', type:'instant', fx:[5, 12, 30] },
@@ -487,6 +496,8 @@ const G = {
 
   cards: [], selCard: -1,
   buffs: {damage:0, speed:0, range:0, gold:0},
+  activeBuffs: {}, activeSynergies: {}, synergyBuffs: {},
+  floatingMsgs: [],  // {text, y, timer, maxTimer}
 
   packPrice: 5, packBuys: 0, packLv: 0,
   gamblesLeft: 3,
@@ -579,6 +590,11 @@ function init() {
           G.gold = 50;
           G.hp = 20;
           G.defenseHp = G.maxDefenseHp;  // 重置防线血条
+          G.activeBuffs = {};
+          G.activeSynergies = {};
+          G.synergyBuffs = {};
+          G.cards = [];  // 清空之前的卡牌
+          addInitialCards();  // 添加初始卡牌
           startNextWave();
           return;
         }
@@ -598,6 +614,11 @@ function init() {
         G.maxWave = 10;
         G.gameTime = 180;
         G.defenseHp = G.maxDefenseHp;  // 重置防线血条
+        G.activeBuffs = {};
+        G.activeSynergies = {};
+        G.synergyBuffs = {};
+        G.cards = [];  // 清空之前的卡牌
+        addInitialCards();  // 添加初始卡牌
         startNextWave();
         return;
       }
@@ -765,10 +786,10 @@ function updateWeapons(dt) {
   const rangeMul  = 1 + G.buffs.range;
   const speedMul  = 1 + G.buffs.speed;
   const dmgMul    = 1 + G.buffs.damage;
+  const synergyBonus = (G.synergyBuffs && G.synergyBuffs.bonus) || 1;
   const range  = def.range * rangeMul;
   const wx     = weaponX(), wy = WEAPON_Y;
 
-  // Find target: prefer most advanced (highest y) in range
   let tgt = null, bestY = -1;
   for (const e of G.enemies) {
     if (dist(wx, wy, e.x, e.y) <= range && e.y > bestY) {
@@ -777,7 +798,7 @@ function updateWeapons(dt) {
   }
   if (!tgt) return;
 
-  const dmg = def.dmg * lvMul * dmgMul;
+  const dmg = def.dmg * lvMul * dmgMul * synergyBonus;
   G.weaponCd = def.rate / speedMul;
 
   if (def.type === 'laser') {
@@ -853,6 +874,16 @@ function dealDmg(e, dmg) {
   }
   e.hp -= dmg;
   burst(e.x, e.y, '#ffff88', 2);
+  // 添加伤害飘字粒子
+  G.particles.push({
+    type: 'dmgFloat',
+    x: e.x,
+    y: e.y,
+    dmg: Math.round(dmg),
+    life: 1500,
+    maxLife: 1500,
+    color: '#ff6666'
+  });
   if (e.hp <= 0) { killEnemy(e); return true; }
   return false;
 }
@@ -903,7 +934,8 @@ function updateSupport(dt) {
 
     s.cd = def.rate; s.shots--;
     const dmgMul = 1 + G.buffs.damage;
-    const dmg    = def.dmg * dmgMul;
+    const synergyBonus = (G.synergyBuffs && G.synergyBuffs.bonus) || 1;
+    const dmg    = def.dmg * dmgMul * synergyBonus;
 
     if (def.aoe) {
       fireBullet(pos.x, pos.y, tgt, dmg, {btype:'rocket', spd:5, aoe:true, aoeR:(def.aoeR||50)*rangeMul});
@@ -924,6 +956,46 @@ function buySupportUnit(ti) {
   G.supports[slot] = { ti, shots: def.shots, cd: 0 };
   flash(`部署 ${def.icon} ${def.name}`);
   updateHUD();
+}
+
+// ============================================================
+// SYNERGY CHECK
+// ============================================================
+function checkSynergies() {
+  for (const card of G.cards) {
+    if (card.def.type !== 'synergy') continue;
+    if (G.activeSynergies && G.activeSynergies[card.id]) continue;
+    const hasAll = card.def.needs.every(needId => G.activeBuffs && G.activeBuffs[needId]);
+    if (hasAll) { activateSynergy(card); }
+  }
+}
+
+function activateSynergy(card) {
+  if (!G.activeSynergies) G.activeSynergies = {};
+  if (!G.synergyBuffs) G.synergyBuffs = {};
+  G.activeSynergies[card.id] = true;
+  G.synergyBuffs.bonus = card.def.bonus[card.lv - 1];
+  const bonus = Math.round((card.def.bonus[card.lv-1] - 1) * 100);
+  flash(`✨ Synergy 激活: ${card.def.icon} ${card.def.name} +${bonus}% 伤害加成!`);
+}
+
+// ============================================================
+// INITIAL CARDS
+// ============================================================
+function addInitialCards() {
+  const initialCardDefs = [
+    {id: 'damage', def: CARD_DEFS.find(c => c.id === 'damage')},
+    {id: 'speed', def: CARD_DEFS.find(c => c.id === 'speed')},
+  ];
+  for (const def of initialCardDefs) {
+    G.cards.push({
+      id: Math.random().toString(36).slice(2),
+      def: def.def,
+      lv: 1
+    });
+  }
+  flash(`🎁 开局赠送: ${G.cards.map(c => c.def.icon + ' ' + c.def.name).join('  ')}`);
+  renderCards();
 }
 
 // ============================================================
@@ -950,6 +1022,8 @@ function updateParticles(dt) {
     if (p.type === 'spark') {
       p.x += p.vx * mul; p.y += p.vy * mul;
       p.vx *= 0.93; p.vy *= 0.93;
+    } else if (p.type === 'dmgFloat') {
+      p.y -= 0.8 * mul;  // 向上飘
     }
   }
 }
@@ -1239,6 +1313,16 @@ function drawParticles() {
       ctx.strokeStyle = `rgba(100,255,100,${a*0.9})`;
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(p.x1,p.y1); ctx.lineTo(p.x2,p.y2); ctx.stroke();
+    } else if (p.type === 'dmgFloat') {
+      const a = Math.max(0, p.life / p.maxLife);
+      ctx.font = 'bold 18px sans-serif';
+      ctx.fillStyle = `rgba(255,102,102,${a})`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = 'rgba(0,0,0,0.8)';
+      ctx.shadowBlur = 3;
+      ctx.fillText('-' + p.dmg, p.x, p.y);
+      ctx.shadowBlur = 0;
     } else {
       const a = p.life / p.maxLife;
       ctx.beginPath(); ctx.arc(p.x, p.y, p.r*a, 0, Math.PI*2);
@@ -1368,14 +1452,53 @@ function drawHUDCanvas() {
       ctx.fillText(`剩余敌人: ${rem}`, FIELD_L, SPAWN_Y + 14);
     }
   }
-  // Message
-  if (G.msg && G.msgTimer > 0) {
-    const a = Math.min(1, G.msgTimer / 600);
-    ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
+  
+  // 更新和渲染浮动消息 - 从中间向顶部飘出
+  if (!G.floatingMsgs) G.floatingMsgs = [];
+  for (let i = G.floatingMsgs.length - 1; i >= 0; i--) {
+    const msg = G.floatingMsgs[i];
+    msg.timer -= 16.67;  // 每帧减少
+    if (msg.timer <= 0) {
+      G.floatingMsgs.splice(i, 1);
+      continue;
+    }
+    
+    // 从中间(CH/2)移到顶部(SPAWN_Y+28)的动画
+    const progress = 1 - (msg.timer / msg.maxTimer);
+    msg.y = CH/2 + (SPAWN_Y + 28 - CH/2) * progress;
+    
+    // 透明度从1逐渐到0
+    const a = Math.max(0, msg.timer / 600);
+    ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center';
     ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 5;
     ctx.fillStyle = `rgba(255,255,100,${a})`;
-    ctx.fillText(G.msg, CW/2, SPAWN_Y + 28);
+    ctx.fillText(msg.text, CW/2, msg.y);
     ctx.shadowBlur = 0;
+  }
+  
+  if (G.cardTipMsg && G.selCard >= 0) {
+    const tipW = 160, tipH = 110;
+    const tipX = CW/2 - tipW/2, tipY = 80;
+    ctx.fillStyle = 'rgba(20,20,30,0.9)';
+    ctx.strokeStyle = '#88ccff';
+    ctx.lineWidth = 2;
+    ctx.fillRect(tipX, tipY, tipW, tipH);
+    ctx.strokeRect(tipX, tipY, tipW, tipH);
+    ctx.fillStyle = 'rgba(20,20,30,0.9)';
+    ctx.beginPath();
+    ctx.moveTo(CW/2, tipY + tipH);
+    ctx.lineTo(CW/2 - 10, tipY + tipH + 10);
+    ctx.lineTo(CW/2 + 10, tipY + tipH + 10);
+    ctx.closePath();
+    ctx.fill();
+    const lines = G.cardTipMsg.text.split('\n');
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillStyle = '#88ccff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    for (let i = 0; i < lines.length; i++) {
+      ctx.fillText(lines[i], tipX + tipW/2, tipY + 8 + i * 16);
+    }
   }
 }
 
@@ -1445,6 +1568,9 @@ function startNextWave() {
   G.gamblesLeft = 3;
   G.weaponCd = 0;
   G.weaponSwitchCd = 0;
+  G.activeBuffs = {};
+  G.activeSynergies = {};
+  G.synergyBuffs = {};
 
   // Build spawn queue with difficulty scaling
   G.spawnQueue = [];
@@ -1515,25 +1641,51 @@ function rollPackCardLevel(packLv) {
 
 function selectCard(i) {
   if (G.selCard === i) {
-    // Double-click/re-click = use
     useCard(i); return;
   }
   if (G.selCard >= 0) {
-    // Try merge
     if (tryMerge(G.selCard, i)) return;
   }
   G.selCard = i;
   renderCards();
-  flash('再次点击使用，或点击另一张相同牌合成升级');
+  
+  // 显示卡牌信息冒泡提示
+  const c = G.cards[i];
+  if (c) {
+    let tip = '';
+    if (c.def.type === 'buff') {
+      const wpnStr = c.def.wpn !== undefined ? `[${WEAPON_DEFS[c.def.wpn].name}专用]` : '';
+      tip = `${c.def.icon} ${c.def.name} Lv${c.lv}\n效果: +${Math.round(c.def.fx[c.lv-1]*100)}% ${c.def.stat}\n${wpnStr}\n再次点击或与同牌合成`;
+    } else if (c.def.type === 'synergy') {
+      tip = `${c.def.icon} ${c.def.name} Lv${c.lv}\n组合效应\n需要: ${c.def.desc}\n加成: +${Math.round((c.def.bonus[c.lv-1]-1)*100)}% 伤害`;
+    } else if (c.def.type === 'instant') {
+      const fx = c.def.fx[c.lv-1];
+      const fxText = c.def.id === 'freeze' || c.def.id === 'slow' ? fx/1000 : fx;
+      tip = `${c.def.icon} ${c.def.name} Lv${c.lv}\n即时效果: ${fxText}\n点击使用`;
+    }
+    if (tip) {
+      G.cardTipMsg = {text: tip, card: c, cardIdx: i};
+    }
+  }
 }
 
 function useCard(i) {
   const c = G.cards[i];
   if (!c) return;
+  if (c.def.wpn !== undefined && G.curWeapon !== c.def.wpn) {
+    flash(`⚠️ 需要装备 ${WEAPON_DEFS[c.def.wpn].name} 才能激活!`);
+    return;
+  }
   if (c.def.type === 'buff') {
     G.buffs[c.def.stat] += c.def.fx[c.lv-1];
+    if (!G.activeBuffs) G.activeBuffs = {};
+    G.activeBuffs[c.def.id] = true;
     flash(`${c.def.icon} ${c.def.name} Lv${c.lv} 激活! +${Math.round(c.def.fx[c.lv-1]*100)}%`);
     updateBuffsDisplay();
+    checkSynergies();
+  } else if (c.def.type === 'synergy') {
+    flash(`⚠️ ${c.def.icon} ${c.def.name} 需要满足条件: ${c.def.desc}`);
+    return;
   } else {
     applyInstant(c);
   }
@@ -1590,7 +1742,23 @@ function renderCards() {
   G.cards.forEach((c, i) => {
     const d = document.createElement('div');
     const sel = G.selCard === i ? ' selected' : '';
-    d.className = `card lv${c.lv}${sel}`;
+    
+    // 检查是否可以激活（buff卡且满足条件）
+    let isUsable = false;
+    if (c.def.type === 'buff') {
+      // buff卡总是可以使用的
+      isUsable = true;
+    } else if (c.def.type === 'synergy') {
+      // synergy卡检查是否满足条件
+      const hasAll = c.def.needs.every(needId => G.activeBuffs && G.activeBuffs[needId]);
+      isUsable = hasAll;
+    } else if (c.def.type === 'instant') {
+      // 即时卡总是可以使用
+      isUsable = true;
+    }
+    
+    const usableClass = isUsable ? ' usable' : '';
+    d.className = `card lv${c.lv}${sel}${usableClass}`;
     d.innerHTML = `<div class="card-icon">${c.def.icon}</div><div class="card-name">${c.def.name}</div><div class="card-meta">Lv${c.lv} ${c.def.type==='buff'?'永久':'即时'}</div>`;
     d.addEventListener('click', e => { e.stopPropagation(); selectCard(i); });
     area.appendChild(d);
@@ -1669,7 +1837,9 @@ function triggerGameOver(win) {
 // FLASH MESSAGE
 // ============================================================
 function flash(msg) {
-  G.msg = msg; G.msgTimer = 2800;
+  // 添加浮动消息
+  if (!G.floatingMsgs) G.floatingMsgs = [];
+  G.floatingMsgs.push({text: msg, y: CH/2, timer: 2800, maxTimer: 2800});
   console.log('[VD]', msg);
 }
 
@@ -1677,7 +1847,7 @@ function flash(msg) {
 // MISC INPUT
 // ============================================================
 document.addEventListener('click', () => {
-  if (G.selCard >= 0) { G.selCard = -1; renderCards(); }
+  if (G.selCard >= 0) { G.selCard = -1; G.cardTipMsg = null; renderCards(); }
 });
 
 // ============================================================
