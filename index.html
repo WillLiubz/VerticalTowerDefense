@@ -1260,13 +1260,16 @@ function drawWeapons() {
   ctx.beginPath(); ctx.arc(x, y, range, 0, Math.PI*2);
   ctx.strokeStyle = 'rgba(255,255,255,0.03)'; ctx.lineWidth = 1; ctx.stroke();
 
-  // Platform - upgrade color based on level
+  // Platform - upgrade color and border based on level
   const switching = G.weaponSwitchCd > 0;
   const colors = ['#ffcc00', '#ff8800', '#ff4400', '#ff0000', '#aa0000', '#550000'];
   const color = colors[Math.min(lv - 1, colors.length - 1)];
+  
+  // Border width increases with level (2-5px)
+  const borderWidth = 2 + Math.min(lv - 1, 3);
   ctx.fillStyle = switching ? '#2a2a00' : color + '33';
   ctx.strokeStyle = switching ? '#ffff00' : color;
-  ctx.lineWidth = 2 + (lv > 1 ? 1 : 0);
+  ctx.lineWidth = borderWidth;
   ctx.beginPath(); ctx.roundRect(x-18, y-18, 36, 36, 6); ctx.fill(); ctx.stroke();
 
   // Icon
@@ -1274,14 +1277,12 @@ function drawWeapons() {
   ctx.fillStyle = '#fff';
   ctx.fillText(def.icon, x, y);
 
-  // Level badge (small circle top-right)
-  ctx.beginPath(); ctx.arc(x+14, y-14, 10, 0, Math.PI*2);
-  ctx.fillStyle = color;
-  ctx.fill();
-  ctx.font = 'bold 10px sans-serif';
-  ctx.fillStyle = '#000';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(lv, x+14, y-14);
+  // Level indicator: stars below platform (bright yellow to stand out from border)
+  ctx.font = '12px sans-serif';
+  ctx.fillStyle = '#ffff66';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  const stars = '★'.repeat(lv);
+  ctx.fillText(stars, x, y + 20);
 
   // Optional switching text
   if (switching) {
