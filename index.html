@@ -97,6 +97,8 @@ body {
 .btn.pack-epic    { border-color: #ffaa00; background: #2a1a00; box-shadow: 0 0 8px #ffaa0066; }
 .btn.gamble-btn   { border-color: #cc4444; background: #2a1010; }
 .btn.wave-btn     { border-color: #2a8a2a; background: #0d2a0d; }
+.btn.auto-merge-btn        { border-color: #7744aa; background: #1a0e2a; }
+.btn.auto-merge-btn.active { border-color: #cc88ff; background: #2d1050; box-shadow: 0 0 8px #aa66ff66; color: #dd99ff; }
 #cardArea {
   display: flex;
   gap: 4px;
@@ -143,9 +145,38 @@ body {
 .card.selected.lv3 { border-color: #ffff00; }
 .card.usable { animation: cardGlow 0.8s infinite; }
 @keyframes cardGlow { 0%,100% { box-shadow: 0 0 6px #44ff4488; } 50% { box-shadow: 0 0 12px #44ff44cc; } }
+@keyframes mergeOut {
+  0%   { transform: scale(1)    translateY(0);   opacity: 1;   filter: brightness(1); }
+  30%  { transform: scale(1.22) translateY(-9px); opacity: 0.9; filter: brightness(2.5); }
+  100% { transform: scale(0.05) translateY(0);   opacity: 0;   filter: brightness(4); }
+}
+@keyframes mergeAppear {
+  0%   { transform: scale(0);    opacity: 0;   filter: brightness(3) drop-shadow(0 0 14px #cc88ff); }
+  55%  { transform: scale(1.28); opacity: 1;   filter: brightness(1.8) drop-shadow(0 0 8px #cc88ff); }
+  78%  { transform: scale(0.93);               filter: brightness(1.2); }
+  100% { transform: scale(1);    opacity: 1;   filter: none; }
+}
+.card.merging-out  { animation: mergeOut    0.24s ease-in   forwards; pointer-events: none; }
+.card.merge-appear { animation: mergeAppear 0.40s cubic-bezier(0.34,1.56,0.64,1) both; }
 .card-icon { font-size: 22px; line-height: 1.2; }
 .card-name { font-size: 9px; line-height: 1.1; color: #ccc; }
 .card-meta { font-size: 8px; color: #888; }
+/* Card stacking */
+.card-slot { position: relative; flex-shrink: 0; width: 66px; height: 68px; }
+.card-back {
+  position: absolute; width: 66px; height: 68px;
+  pointer-events: none; border-radius: 8px; border: 2px solid;
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 2px; opacity: 0.62;
+}
+.card-back.lv1 { border-color: #444; background: linear-gradient(160deg,#111128,#1a1a40); }
+.card-back.lv2 { border-color: #2255aa; background: linear-gradient(160deg,#060e1e,#0d1835); }
+.card-back.lv3 { border-color: #996600; background: linear-gradient(160deg,#160e00,#221500); }
+.card-count-badge {
+  position: absolute; top: -5px; right: -5px;
+  background: #aa44ee; color: #fff; font-size: 9px; font-weight: bold;
+  border-radius: 7px; padding: 1px 4px; z-index: 20; pointer-events: none;
+}
 #supportRow {
   display: flex;
   gap: 4px;
@@ -176,7 +207,7 @@ body {
   background: rgba(0,0,0,0.75);
   z-index: 50;
 }
-#gamblingModal, #gameOverScreen {
+#gamblingModal, #gameOverScreen, #packRevealModal {
   display: none;
   position: fixed;
   top: 50%;
@@ -192,6 +223,9 @@ body {
 }
 #gamblingModal { border: 2px solid #6633aa; }
 #gamblingModal h3 { color: #ffaa00; margin-bottom: 12px; font-size: 18px; }
+#packRevealModal  { border: 2px solid #8844cc; box-shadow: 0 0 30px #8844cc33; }
+#packRevealModal h3 { color: #cc88ff; margin-bottom: 14px; font-size: 18px; }
+#packRevealCards  { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 4px; }
 .gamble-opt {
   display: flex;
   justify-content: space-between;
@@ -246,6 +280,7 @@ body {
       <button class="btn pack-normal" id="buyPackBtn" onclick="buyPack()">🎁 卡包 5g</button>
       <button class="btn gamble-btn"  id="gamblingBtn" onclick="openGambling()" disabled>🎲 赌博</button>
       <button class="btn" id="rulesBtn" onclick="openRules()">📘 规则</button>
+      <button class="btn auto-merge-btn" id="autoMergeBtn" onclick="toggleAutoMerge()">⚡ 自动合成</button>
       <div style="flex:1"></div>
       <span id="gamblesLeftLabel" style="font-size:11px;color:#888;white-space:nowrap">赌博:3次</span>
       <button class="btn wave-btn" id="waveBtn" onclick="startNextWave()">▶ 第1波</button>
@@ -295,6 +330,13 @@ body {
   <button class="btn" onclick="closeGambling()" style="margin-top:10px;width:100%">取消</button>
 </div>
 
+<!-- Pack Reveal Modal -->
+<div id="packRevealModal">
+  <h3>🎁 获得卡牌</h3>
+  <div id="packRevealCards"></div>
+  <button class="btn" onclick="closePackReveal()" style="margin-top:12px;width:100%">收下</button>
+</div>
+
 <!-- Game Over -->
 <div id="gameOverScreen">
   <h2 id="goTitle">游戏结束</h2>
@@ -339,6 +381,7 @@ function closeAllModals() {
   closeGambling();
   closeRules();
   closeWeaponSelector();
+  closePackReveal();
 }
 
 function openWeaponSelector() {
@@ -505,6 +548,8 @@ const G = {
 
   packPrice: 5, packBuys: 0, packLv: 0,
   gamblesLeft: 3,
+  autoMerge: false,
+  _merging:   false,
 
   freezeMs: 0, slowMs: 0, slowAmt: 0,
 
@@ -1522,7 +1567,7 @@ function updateHUD() {
   // Pack button
   const pb = document.getElementById('buyPackBtn');
   pb.textContent = `🎁 ${PACK_NAMES[G.packLv]} ${G.packPrice}g`;
-  pb.disabled = G.gold < G.packPrice || G.cards.length >= 6 || G.over;
+  pb.disabled = G.gold < G.packPrice || G.over;
   pb.className = `btn ${PACK_CSS[G.packLv]}`;
 
   // Wave button
@@ -1613,7 +1658,7 @@ function waveComplete() {
 // CARDS
 // ============================================================
 function buyPack() {
-  if (G.gold < G.packPrice || G.cards.length >= 6 || G.over) return;
+  if (G.gold < G.packPrice || G.over) return;
   G.gold      -= G.packPrice;
   G.packPrice += 2;
   G.packBuys++;
@@ -1624,7 +1669,7 @@ function buyPack() {
   }
 
   const newCards = [];
-  for (let i = 0; i < 3 && G.cards.length + newCards.length < 6; i++) {
+  for (let i = 0; i < 3; i++) {
     newCards.push({
       id: Math.random().toString(36).slice(2),
       def: CARD_DEFS[Math.floor(Math.random()*CARD_DEFS.length)],
@@ -1633,9 +1678,8 @@ function buyPack() {
   }
   G.cards.push(...newCards);
 
-  flash(`获得 ${newCards.map(c=>c.def.icon+' Lv'+c.lv).join('  ')}`);
   updateHUD();
-  renderCards();
+  showPackReveal(newCards);
 }
 
 function rollPackCardLevel(packLv) {
@@ -1736,7 +1780,90 @@ function tryMerge(i1, i2) {
   flash(`✨ 合成! ${newCard.def.icon} ${newCard.def.name} → Lv${newCard.lv}`);
   renderCards();
   updateHUD();
+  doAutoMerge();
   return true;
+}
+
+// Auto-merge: scan & merge all eligible pairs, chain until none remain
+const _sleep = ms => new Promise(r => setTimeout(r, ms));
+async function doAutoMerge() {
+  if (!G.autoMerge || G._merging) return;
+  G._merging = true;
+  let total = 0;
+  try {
+    while (true) {
+      // Find first mergeable pair
+      let pi = -1, pj = -1;
+      for (let i = 0; i < G.cards.length && pi === -1; i++)
+        for (let j = i + 1; j < G.cards.length; j++)
+          if (G.cards[i].def.id === G.cards[j].def.id &&
+              G.cards[i].lv === G.cards[j].lv && G.cards[i].lv < 3)
+            { pi = i; pj = j; break; }
+      if (pi === -1) break;
+
+      // Snapshot before touching DOM
+      const defId  = G.cards[pi].def.id;
+      const srcDef = G.cards[pi].def;
+      const newLv  = G.cards[pi].lv + 1;
+      const hi = Math.max(pi, pj), lo = Math.min(pi, pj);
+
+      // Find the slot for this group; animate the shallowest back card out
+      renderCards();
+      const slot = [...document.getElementById('cardArea').children]
+                     .find(el => el.dataset.defid === defId);
+      const backEl = slot?.querySelector('.card-back');       // shallowest back
+      const frontEl = slot?.querySelector('.card:not(.card-back)');
+      if (backEl)  backEl.classList.add('merging-out');       // back card merges up
+      else if (frontEl) frontEl.classList.add('merging-out'); // fallback (single card)
+      await _sleep(240);
+
+      // Perform the actual splice
+      G.cards.splice(hi, 1);
+      G.cards.splice(lo, 1);
+      G.cards.splice(lo, 0, { id: Math.random().toString(36).slice(2), def: srcDef, lv: newLv });
+      total++;
+
+      // Render new state; spring-animate the upgraded front card
+      renderCards();
+      const newSlot  = [...document.getElementById('cardArea').children]
+                         .find(el => el.dataset.defid === defId);
+      const newFront = newSlot?.querySelector('.card:not(.card-back)');
+      if (newFront) newFront.classList.add('merge-appear');
+      await _sleep(130);  // brief gap before next iteration
+    }
+  } finally {
+    G._merging = false;
+  }
+  if (total > 0) {
+    flash(`⚡ 自动合成 ×${total}`);
+    G.selCard = -1;
+    updateHUD();
+  }
+}
+
+function toggleAutoMerge() {
+  G.autoMerge = !G.autoMerge;
+  const btn = document.getElementById('autoMergeBtn');
+  if (G.autoMerge) {
+    btn.textContent = '⚡ 自动合成: 开';
+    btn.classList.add('active');
+    doAutoMerge(); // immediately process existing hand
+  } else {
+    btn.textContent = '⚡ 自动合成: 关';
+    btn.classList.remove('active');
+  }
+}
+
+
+// Group G.cards by def.id; each group sorted highest-level first
+function groupCards() {
+  const order = [], map = {};
+  G.cards.forEach((card, idx) => {
+    const key = card.def.id;
+    if (!map[key]) { map[key] = []; order.push(key); }
+    map[key].push({ card, idx });
+  });
+  return order.map(key => map[key].slice().sort((a, b) => b.card.lv - a.card.lv));
 }
 
 function renderCards() {
@@ -1746,29 +1873,48 @@ function renderCards() {
     return;
   }
   area.innerHTML = '';
-  G.cards.forEach((c, i) => {
-    const d = document.createElement('div');
-    const sel = G.selCard === i ? ' selected' : '';
-    
-    // 检查是否可以激活（buff卡且满足条件）
+  groupCards().forEach(group => {
+    const { card: top, idx: topIdx } = group[0];
+    const backs = group.slice(1);
+    const isSel = G.selCard === topIdx;
     let isUsable = false;
-    if (c.def.type === 'buff') {
-      // buff卡总是可以使用的
-      isUsable = true;
-    } else if (c.def.type === 'synergy') {
-      // synergy卡检查是否满足条件
-      const hasAll = c.def.needs.every(needId => G.activeBuffs && G.activeBuffs[needId]);
-      isUsable = hasAll;
-    } else if (c.def.type === 'instant') {
-      // 即时卡总是可以使用
-      isUsable = true;
+    if (top.def.type === 'buff') isUsable = true;
+    else if (top.def.type === 'synergy') isUsable = top.def.needs.every(id => G.activeBuffs && G.activeBuffs[id]);
+    else if (top.def.type === 'instant') isUsable = true;
+
+    // Slot wrapper
+    const slot = document.createElement('div');
+    slot.className = 'card-slot';
+    slot.dataset.defid = top.def.id;
+
+    // Back cards — stacked behind, offset down-right
+    backs.forEach(({ card: bc }, k) => {
+      const back = document.createElement('div');
+      back.className = `card lv${bc.lv} card-back`;
+      back.style.top    = `${(k + 1) * 5}px`;
+      back.style.left   = `${(k + 1) * 4}px`;
+      back.style.zIndex = backs.length - k;
+      back.innerHTML = `<div class="card-icon" style="font-size:14px;opacity:0.45">${top.def.icon}</div>`
+                     + `<div class="card-meta">Lv${bc.lv}</div>`;
+      slot.appendChild(back);
+    });
+
+    // Front card
+    const d = document.createElement('div');
+    d.className = `card lv${top.lv}${isSel ? ' selected' : ''}${isUsable ? ' usable' : ''}`;
+    d.style.cssText = 'position:absolute;top:0;left:0;z-index:10;';
+    d.innerHTML = `<div class="card-icon">${top.def.icon}</div>`
+                + `<div class="card-name">${top.def.name}</div>`
+                + `<div class="card-meta">Lv${top.lv} ${top.def.type === 'buff' ? '永久' : '即时'}</div>`;
+    if (group.length > 1) {
+      const badge = document.createElement('div');
+      badge.className = 'card-count-badge';
+      badge.textContent = `×${group.length}`;
+      d.appendChild(badge);
     }
-    
-    const usableClass = isUsable ? ' usable' : '';
-    d.className = `card lv${c.lv}${sel}${usableClass}`;
-    d.innerHTML = `<div class="card-icon">${c.def.icon}</div><div class="card-name">${c.def.name}</div><div class="card-meta">Lv${c.lv} ${c.def.type==='buff'?'永久':'即时'}</div>`;
-    d.addEventListener('click', e => { e.stopPropagation(); selectCard(i); });
-    area.appendChild(d);
+    d.addEventListener('click', e => { e.stopPropagation(); selectCard(topIdx); });
+    slot.appendChild(d);
+    area.appendChild(slot);
   });
 }
 
@@ -1789,6 +1935,34 @@ function closeGambling() {
   document.getElementById('overlay').style.display       = 'none';
   document.getElementById('gamblingModal').style.display = 'none';
 }
+
+function showPackReveal(newCards) {
+  const container = document.getElementById('packRevealCards');
+  container.innerHTML = '';
+  newCards.forEach((c, k) => {
+    const d = document.createElement('div');
+    d.className = `card lv${c.lv}`;
+    d.style.cssText = `position:relative;flex-shrink:0;
+      animation:mergeAppear 0.4s cubic-bezier(0.34,1.56,0.64,1) both;
+      animation-delay:${k * 0.12}s`;
+    d.innerHTML = `<div class="card-icon">${c.def.icon}</div>`
+                + `<div class="card-name">${c.def.name}</div>`
+                + `<div class="card-meta">Lv${c.lv} ${c.def.type === 'buff' ? '永久' : '即时'}</div>`;
+    container.appendChild(d);
+  });
+  document.getElementById('overlay').style.display        = 'block';
+  document.getElementById('packRevealModal').style.display = 'block';
+}
+
+function closePackReveal() {
+  const modal = document.getElementById('packRevealModal');
+  if (!modal || modal.style.display === 'none') return;
+  document.getElementById('overlay').style.display = 'none';
+  modal.style.display = 'none';
+  renderCards();
+  doAutoMerge();
+}
+
 function doGamble(risk) {
   const bet = parseInt(document.getElementById('betInput').value);
   const maxBet = Math.floor(G.gold * 0.5);
