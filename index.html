@@ -417,6 +417,8 @@ const WEAPON_DEFS = [
   { name:'狙击', icon:'🎯', dmg:50,  rate:1200, range:500, type:'sniper', pierce:true, lvMul:[1,1.2,1.5,1.9,2.4,3.0] },
   { name:'激光', icon:'⚡', dmg:3,   rate:40,   range:400, type:'laser',  lvMul:[1,1.4,1.9,2.5,3.2,4.0] },
   { name:'火箭', icon:'🚀', dmg:30,  rate:800,  range:450, type:'rocket', aoe:true, aoeR:60, lvMul:[1,1.25,1.6,2.0,2.5,3.1] },
+  // 新增第五种武器
+  { name:'等离子', icon:'💥', dmg:25, rate:700, range:430, type:'plasma', aoe:true, aoeR:50, lvMul:[1,1.3,1.7,2.2,2.8,3.6] },
 ];
 
 const SUPPORT_DEFS = [
@@ -435,6 +437,8 @@ const CARD_DEFS = [
   { id:'sniper_focus', name:'狙击聚焦', icon:'🎯', type:'buff', wpn:1, stat:'speed',  fx:[0.40, 0.90, 2.00], desc:'狙击专用' },
   { id:'laser_burst', name:'激光脉冲',   icon:'⚡⚡', type:'buff', wpn:2, stat:'speed', fx:[0.50, 1.20, 2.50], desc:'激光专用' },
   { id:'rocket_spread',name:'火箭扩散',  icon:'🚀🚀', type:'buff', wpn:3, stat:'range', fx:[0.45, 1.10, 2.30], desc:'火箭专用' },
+  // 新武器专用卡
+  { id:'plasma_surge', name:'等离子冲击', icon:'💥💥', type:'buff', wpn:4, stat:'speed', fx:[0.45,1.0,2.0], desc:'等离子专用' },
   { id:'firepower_sync', name:'火力链接', icon:'🔗🔥', type:'synergy', needs:['damage','speed'], bonus:[1.25, 1.50, 1.80], desc:'需: 火力强化+急速射击' },
   { id:'precision_shot', name:'精准狙击', icon:'🎯⚡', type:'synergy', needs:['sniper_focus','range'], bonus:[1.30, 1.60, 2.00], desc:'需: 狙击聚焦+射程' },
   { id:'overwhelming', name:'压倒优势', icon:'💥💥', type:'synergy', needs:['damage','gold'], bonus:[1.40, 1.75, 2.20], desc:'需: 火力强化+赏金' },
@@ -488,8 +492,8 @@ const G = {
 
   enemies: [], bullets: [], particles: [],
 
-  curWeapon: 0,  // 当前武器类型索引 (0-3)
-  weaponLevels: [1, 1, 1, 1],  // 每个武器的等级
+  curWeapon: 0,  // 当前武器类型索引 (0-4)
+  weaponLevels: [1, 1, 1, 1, 1],  // 每个武器的等级
   weaponCd: 0,
   weaponSwitchCd: 0,
   supports: [null, null, null, null], // L0, L1, R0, R1
@@ -808,6 +812,9 @@ function updateWeapons(dt) {
     fireBullet(wx, wy, tgt, dmg, {btype:'rocket', spd:5, aoe:true, aoeR: def.aoeR * rangeMul});
   } else if (def.type === 'sniper') {
     fireBullet(wx, wy, tgt, dmg, {btype:'sniper', spd:12, pierce:true});
+  } else if (def.aoe) {
+    // generic aoe projectile for weapons that aren’t rockets but have aoe flag
+    fireBullet(wx, wy, tgt, dmg, {btype:'rocket', spd:5, aoe:true, aoeR: def.aoeR * rangeMul});
   } else {
     fireBullet(wx, wy, tgt, dmg, {btype:'mg', spd:11});
   }
